@@ -9,3 +9,7 @@ Why:
 In nirs.io.loadDirectory (line 65)
 In Preprocess (line 54)"
 
+github clone repos:
+* spm12
+* nirs-toolbox
+both links are available in the script
