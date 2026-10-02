@@ -18,19 +18,23 @@ warning('off', 'MATLAB:dispatcher:nameConflict');
 
 % Add NIRS Toolbox to MATLAB Path
 % https://github.com/huppertt/nirs-toolbox.git
-addpath(genpath('D:\GitHub\nirs-toolbox'))
+% addpath(genpath('D:\GitHub\nirs-toolbox')) % PC
+addpath(genpath('C:\Users\Jalynn\Documents\GitHub\nirs-toolbox')) % Laptop
 
 % Add NIRS SPM 
 % https://github.com/spm/spm12.git
-addpath('D:\GitHub\spm12')
+% addpath('D:\GitHub\spm12') % PC
+addpath('C:\Users\Jalynn\Documents\GitHub\spm12') % Laptop
 
 % https://www.nitrc.org/projects/nirs_spm/
-addpath('D:\GitHub\NIRS_SPM_v4_r1')
+% addpath('D:\GitHub\NIRS_SPM_v4_r1') % PC
+addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1') % Laptpo
 
 %% Load NIRS Files
 
 % Add Data Directory
-Directory = 'D:\GitHub\Mars_fNIRS\Data\fNIRS';
+% Directory = 'D:\GitHub\Mars_fNIRS\Data\fNIRS'; % PC
+Directory = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\fNIRS'; % Laptop
 
 % NIRS File for Ptp1:
 % filePath = 'D:\GitHub\Mars_fNIRS\Data\fNIRS\2025-10-26-P1\2025-10-26_001.nirs';
@@ -72,7 +76,8 @@ raw(1).draw();
 %% Extract Events
 
 % Load Events File
-event_csv_path = 'D:\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessions(in).csv';
+% event_csv_path = 'D:\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessions(in).csv'; % PC
+event_csv_path = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessions(in).csv'; % Laptop
 event_table = readtable(event_csv_path);
 
 % Event data will be grouped by ptp stored in a struct
