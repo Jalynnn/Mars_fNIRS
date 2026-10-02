@@ -1,0 +1,17 @@
+Participant 1 
+
+raw(1).draw()
+
+Graph is of raw light intensities
+On the y-axis this is all 0+ 
+higher values = more infrared light made it through tissue
+lower values = more light was absorbed
+
+There are 98 raw light intensity lines
+In preprocess.m we saw "{'d'  }    {[ 20960 98]}    {'double'}"
+two distinct wavelengths; 760 nm and 850 nm
+49 channels then!
+
+The legend on the far right side is actually for the stimulus received
+I assume these are the LSL numbers
+All lines below 0 on the y-axis are for when the LSL stimuli was received
