@@ -7,12 +7,20 @@ clear; clc;
 warning('off', 'MATLAB:dispatcher:nameConflict');
 
 %% 1. Ensure Dependencies & Paths
-addpath(genpath('D:\GitHub\nirs-toolbox'));
-addpath('D:\GitHub\spm12');
-addpath('D:\GitHub\NIRS_SPM_v4_r1');
+% % PC
+% addpath(genpath('D:\GitHub\nirs-toolbox'));
+% addpath('D:\GitHub\spm12');
+% addpath('D:\GitHub\NIRS_SPM_v4_r1');
+
+% Laptop
+addpath(genpath('C:\Users\Jalynn\Documents\GitHub\nirs-toolbox'))
+addpath('C:\Users\Jalynn\Documents\GitHub\spm12')
+addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1')
 
 %% 2. Load Data for Participant 1
-Directory = 'D:\GitHub\Mars_fNIRS\Data\fNIRS';
+% Directory = 'D:\GitHub\Mars_fNIRS\Data\fNIRS'; % PC
+Directory = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\fNIRS'; % Laptop
+
 raw = nirs.io.loadDirectory(Directory, {'Subject'});
 
 % Locate Participant 1
@@ -26,7 +34,9 @@ end
 raw_p1 = raw(p1_idx);
 
 %% 3. Load Events CSV & Attach to P1
-event_csv_path = 'D:\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessions(in).csv';
+% event_csv_path = 'D:\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessions(in).csv'; % PC
+event_csv_path = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessions(in).csv'; % Laptop
+
 event_table = readtable(event_csv_path);
 
 p1_events = event_table(strcmp(event_table.fnirs_folder, '2025-10-26-P1'), :);
