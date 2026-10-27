@@ -1,0 +1,37 @@
+A. Path Setup & File Discovery
+
+1. Set MATLAB Paths
+
+addpaths
+
+2. Load NIRS Files / Metadata Sanity Check
+
+nirs.loadDirectory
+
+3. Visual of .nirs File
+
+.draw for simple GUI version
+
+4. Extract Events / Trigger Files
+
+load CSV file
+assign events to corresponding ptps
+in (1) the struct and (2) 'raw' variable
+
+B. Montage Mapping & Digitization Registration
+
+C. Raw Channel Quality Control (SNIR Check) & Documentation
+
+D. Preprocessing Pipeline Construction with NIRS-Toolbox
+
+. Baseline SNR calculation
+. Prune bad long channels
+. Optical Density Conversion
+. Motion artifact correct wavelet filter (No TDDR - just wavelet)
+. Beer Lambert Law 
+. Downsample
+. Bandpass filter
+
+E. Event Injection & Synchronization
+
+F. Export Clean Data & Quality Assessment

@@ -57,6 +57,8 @@ Directory = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\fNIRS'; % Laptop
     % Number of trigger channels: 66
     % Montage metadata: 1 1 struct; source-detector setup
 
+    % raw(1).Fs: 5.0863 (Sampling rate)
+
 % Search for all .nirs/.snirf files
 % Assigns the first subfolder the subj ID
 % Raw is an array of nirs.core.Data objects
