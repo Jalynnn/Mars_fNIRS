@@ -14,10 +14,10 @@ addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1');
 %% 2. Load Dataset & Events Table
 Directory = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\fNIRS';
 raw = nirs.io.loadDirectory(Directory, {'Subject'});
-event_csv_path = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessions(in).csv';
+event_csv_path = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV3.csv';
 event_table = readtable(event_csv_path);
 
-output_qc_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Diagnostics\Dyad_Plots';
+output_qc_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Output\Dyad_Plots';
 if ~exist(output_qc_dir, 'dir')
     mkdir(output_qc_dir);
 end
@@ -27,7 +27,36 @@ pair_list = {
     'Pair_01', '2025-10-26-P1',   '2025-10-26-P2';
     % 'Pair_02', '2025-10-27-P3',   '2025-10-27-P4.2';
     'Pair_03', '2025-10-27-P5',   '2025-10-27-P6';
-    % Add remaining session pairings here...
+    'Pair_04', '2025-10-30-P7', '2025-10-30-P8';
+    'Pair_05', '2025-10-31-P9', '2025-10-31-P10';
+    'Pair_06', '2025-10-31-P11', '2025-10-31-P12';
+    % 'Pair_07', '2025-11-02-P13.2', '2025-11-02-P14.2';
+    'Pair_08', '2025-11-03-P15', '2025-11-03-P16';
+    'Pair_09', '2025-11-11-P17', '2025-11-11-P18';
+    % 'Pair_10', '2025-11-12-P19', '2025-11-12-P20.1';
+    'Pair_11', '2025-11-12-P21', '2025-11-12-P22';
+    'Pair_12', '2025-11-15-P23', '2025-11-15-P24';
+    'Pair_13', '2025-11-20-P25', '2025-11-20-P26';
+    'Pair_14', '2025-11-24-P27', '2025-11-24-P28';
+    'Pair_15', '2025-11-25-P29-redo', '2025-11-25-P30-redo';
+    'Pair_16', '2025-11-30-P31', '2025-11-30-P32';
+    'Pair_17', '2025-12-01-P33', '2025-12-01-P34';
+    'Pair_18', '2025-12-05-P35', '2025-12-05-P36';
+    'Pair_19', '2025-12-05-P37', '2025-12-05-P38';
+    'Pair_20', '2025-12-09-P39', '2025-12-09-P40';
+    'Pair_21', '2025-12-11-P41', '2025-12-11-P42';
+    'Pair_22', '2025-12-12-P43', '2025-12-12-P44';
+    'Pair_23', '2025-12-13-P45', '2025-12-13-P46';
+    % 'Pair_24', '2025-12-18-P47.1', '2025-12-18-P48.1';
+    'Pair_25', '2025-12-20-P49', '2025-12-20-P50';
+    'Pair_26', '2025-12-20-P51', '2025-12-20-P52';
+    % 'Pair_27', '2026-01-11-P53.1', '2026-01-11-P54';
+    'Pair_28', '2026-01-13-P55', '2026-01-13-P56';
+    'Pair_29', '2026-01-14-P57', '2026-01-14-P58';
+    'Pair_30', '2026-01-15-P59', '2026-01-15-P60';
+    'Pair_31', '2026-01-16-P61', '2026-01-16-P62';
+    'Pair_32', '2026-01-16-P63', '2026-01-16-P64';
+    'Pair_33', '2026-01-17-P65', '2026-01-17-P66';
 };
 dyad_table = cell2table(pair_list, ...
     'VariableNames', {'DyadID', 'Partner1_Folder', 'Partner2_Folder'});
@@ -202,7 +231,7 @@ for d = 1:num_dyads
         end
     end
     hold off;
-    ylabel('Blocks');
+    ylabel('Blocks / Sustained');
     title(missing_macro_str, 'FontSize', 8.5, 'FontWeight', 'normal', 'Interpreter', 'none');
     ylim([0 1.05]);
     yticks([0.22, 0.77]);
@@ -280,7 +309,7 @@ for d = 1:num_dyads
         end
     end
     hold off;
-    ylabel('Transients');
+    ylabel('Events / Transients');
     title(missing_task_str, 'FontSize', 8.5, 'FontWeight', 'normal', 'Interpreter', 'none');
     ylim([0 1.05]);
     yticks([0.22, 0.77]);

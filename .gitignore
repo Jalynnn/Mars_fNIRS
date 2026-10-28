@@ -1,3 +1,15 @@
 # Ignore the following file types
 *.csv
 *.nirs
+*.snirf
+*.wl1
+*.wl2
+*.zip
+*.json
+*.jbr
+*.tri
+*.txt
+*.acc
+*.hdr
+*.mat
+*.png

@@ -3,10 +3,16 @@
 % This is script 1/4 to load and clean the fNIRS data
 % Load; Digitize; BLL; Bandpass; Check Quality; Export as .fif? Save
 % variables too; Motion artifact corrects (TDDR?); Short separation
-% channels
+% channels; Prunes bad channels; applies wavelet motion correction;
+% downsamples to 1 hz; filters 0.01 to 0.2 Hz
 % Input: Raw .nirs data; digitization .txt files;
 % Output: Cleaned time series .mat? .fif?; File of excluded bad channels;
 % Signal to noise ratio values for quality diagnostics
+
+%% SECTION A
+
+% Command Window Update
+fprintf('\n--- Starting fNIRS Preprocess.m ---\n')
 
 % Clear Terminal
 clear, clc
@@ -14,7 +20,7 @@ clear, clc
 % Silence naming conflict warnings
 warning('off', 'MATLAB:dispatcher:nameConflict');
 
-%% Set MATLAB Paths
+%% 1. Set MATLAB Paths
 
 % Add NIRS Toolbox to MATLAB Path
 % https://github.com/huppertt/nirs-toolbox.git
@@ -28,9 +34,12 @@ addpath('C:\Users\Jalynn\Documents\GitHub\spm12') % Laptop
 
 % https://www.nitrc.org/projects/nirs_spm/
 % addpath('D:\GitHub\NIRS_SPM_v4_r1') % PC
-addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1') % Laptpo
+addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1') % Laptop
 
-%% Load NIRS Files
+%% 2. Load NIRS Files
+
+% Command Window Update
+fprintf('\n--- Load the NIRS Files for Each Ptp ---\n')
 
 % Add Data Directory
 % Directory = 'D:\GitHub\Mars_fNIRS\Data\fNIRS'; % PC
@@ -65,7 +74,43 @@ Directory = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\fNIRS'; % Laptop
 % 'Subject ID' is added to raw dictionary per folder/subj
 raw = nirs.io.loadDirectory(Directory, {'Subject'});
 
-%% Visual of .nirs File
+% Later I learned that it was sorting raw in an interesting way (e.g.
+% raw(1) was ptp 14.2 and I wanted this to be more intuitive
+
+% Sort by ptp id rather than date
+subj_names = arrayfun(@(x) x.demographics('Subject'), raw, 'UniformOutput', false);
+
+% Initialize as empty
+ptp_num = zeros(length(raw), 1);
+
+% Loop through each of the subj_names from raw
+for k = 1:length(subj_names)
+
+    % Only use the ptp id that comes after 'p' in the folder name
+    token = regexp(subj_names{k}, 'P(?<num>\d+(\.\d+)?)', 'names');
+    
+    if ~isempty(token)
+        ptp_num(k) = str2double(token.num);
+    else
+        ptp_num(k) = k;
+    end
+end
+
+% Sort by the ptp_numbers
+[~, sort_order] = sort(ptp_num);
+raw = raw(sort_order);
+
+% Confirm fix in command window
+% fprintf('Raw(1) is now: %s\n', raw(1).demographics('Subject'));
+
+% Command Window Update
+fprintf('\n--- Loading Participants Complete ---\n')
+
+%% 3. Visual of .nirs File
+
+% Command Window Update
+fprintf('\n--- Providing a Visual of Raw(1) ---\n')
+fprintf('\nFor Better Visuals; Visualize_Dyads.m\n')
 
 % Uses built-in GUI
 % This version simply outputs the 49 channels x 2 wavelengths
@@ -75,11 +120,14 @@ raw(1).draw();
 % Use the Visualize_Events.m script for the visual with the 
 % events provided by the CSV file
 
-%% Extract Events
+%% 4. Extract Events
+
+% Command Window Update
+fprintf('\n--- Extracting Events for Each Participant ---\n')
 
 % Load Events File
 % event_csv_path = 'D:\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessions(in).csv'; % PC
-event_csv_path = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessions(in).csv'; % Laptop
+event_csv_path = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV3'; % Laptop
 event_table = readtable(event_csv_path);
 
 % Event data will be grouped by ptp stored in a struct
@@ -115,10 +163,226 @@ for i = 1:length(raw)
     fs = 1 / mean(diff(raw(i).time));
     individual_events = unique(subj_events.event);
 
+    % The LSL triggers that were sent are still saved in the fNIRS data
+    % We want to remove them and instead use the CSV
+    % This for now just creates an empty dictionary
+    raw(i).stimulus = Dictionary();
+
+    % Now we need to populate that dictionary with the CSV events
+    for event = 1:length(individual_events)
+
+        % Pulls the event name from the list of csv events for this
+        % participant
+        event_name = individual_events{event};
+
+        % Creates a boolean mask matching all rows in the event table that
+        % correspond with this condition name
+        event_rows = strcmp(subj_events.event, event_name);
+
+        % Extract sample indices and durations in second from table
+        idx_samples = subj_events.onset_fnirs_index(event_rows);
+        dur_seconds = subj_events.duration_s(event_rows);
+
+        % Safety check - only keep valid indices within raw time bounds
+        valid_mask = (idx_samples >= 1) & (idx_samples <= length(raw(i).time));
+        if ~all(valid_mask)
+            warning('Ptp %s: Excluded %d event(s) for "%s" exceeding time vector bounds.', ...
+                subj_id, sum(~valid_mask), event_name)
+            idx_samples = idx_samples(valid_mask);
+            dur_seconds = dur_seconds(valid_mask);
+        end
+        if isempty(idx_samples), continue; end
+
+        % map sample indices to elapsed seconds using raw(i).time
+        onset_seconds = raw(i).time(idx_samples);
+        
+        % Create empty NIRS Toolbox stimulus event object
+        stim = nirs.design.StimulusEvents();
+        % Assign the csv name to stimulus object
+        stim.name = event_name;
+        % Assign the csv onset to stimulus object in seconds
+        stim.onset = onset_seconds;
+        % Extract corresponding event duration in seconds
+        stim.dur = dur_seconds;
+        % Set regressor weights to 1 matching the number of event
+        % occurrences
+        stim.amp = ones(size(stim.onset));
+
+        % Register stimulus event object into ptp's data object stimulus
+        % dictionary (the empty one before the for loop)
+        raw(i).stimulus(event_name) = stim;
+    end
 end
+
+% Command Window Update
+fprintf('\n--- All Events Extracted ---\n')
+
+%% SECTION B
+
+% This section utilizes the participants digitzation files for montage
+% mapping for when we have to create visuals.
+
+%% 5. Montage Application
+
+% Command window updates
+fprintf('\n--- Registering 3D Optode Digitization Points ---\n')
+
+% Loop through all participants
+for i = 1:length(raw)
+    % Collect ptp id
+    subj_id = raw(i).demographics('Subject');
+
+    % Searches for the digitization file in this subj folder
+    dig_file = fullfile(Directory, subj_id, 'digpts.txt');
+
+    % Not all ptps have digitization files (ptp 3 comes to mind)
+    if ~exist(dig_file, 'file')
+        % Check subfolders if they exist but I'm pretty sure there aren't
+        % any
+        alt_files = dir(fullfile(Directory, subj_id, '**', 'digpts.txt'));
+        if ~isempty(alt_files)
+            dig_file = fullfile(alt_files(1).folder, alt_files(1).name);
+        else
+            warning('No digpts.txt found for participant: %s. Skipping registration.', subj_id);
+            continue;
+        end
+    end
+
+    % Read digpts.txt
+    fid = fopen(dig_file, 'r');
+    dig_data = textscan(fid, '%s %f %f %f', 'Delimiter', ':', 'MultipleDelimsAsOne', true);
+    fclose(fid);
+
+    % Pulls the label from col 1 and then the x, y, and z in mm and assigns
+    % to coords
+    labels = strtrim(dig_data{1});
+    coords = [dig_data{2}, dig_data{3}, dig_data{4}];
+
+    % Separates fiducials from the sources and detectors
+    is_fid = ismember(lower(labels), {'nz', 'ar', 'al', 'cz', 'iz'});
+    is_src = startsWith(lower(labels), 's') & ~is_fid;
+    is_det = startsWith(lower(labels), 'd') & ~is_fid;
+
+    % Ha ok now a little repetitive solution
+    % Separate the fiducials/source/detectors by labels and coords
+    fid_labels = labels(is_fid);
+    fid_coords = coords(is_fid, :);
+    
+    src_labels = labels(is_src);
+    src_coords = coords(is_src, :);
+    
+    det_labels = labels(is_det);
+    det_coords = coords(is_det, :);
+
+    % Sort sources and detectors numerically (s1, s2, ..., s16; d1, d2, ..., d23
+    % This is a defensive check in case s1, s10, .. s2
+    % extra and doesn't apply to this study but will keep
+    % Do it for the sources
+    src_nums = cellfun(@(x) sscanf(x, 's%d'), lower(src_labels));
+    [~, src_order] = sort(src_nums);
+    src_labels = src_labels(src_order);
+    src_coords = src_coords(src_order, :);
+    
+    % Then for the detectors
+    det_nums = cellfun(@(x) sscanf(x, 'd%d'), lower(det_labels));
+    [~, det_order] = sort(det_nums);
+    det_labels = det_labels(det_order);
+    det_coords = det_coords(det_order, :);
+
+    % Format into NIRS-Toolbox registered optodes table
+    % This way we can assign the montage to raw objects
+    % sub-parts of the table
+    % Standardize names for Probe1020 internal parser:
+    % 'FID-NZ', 'Source-01', 'Detector-01'
+    std_fid_names = cellfun(@(x) ['FID-' upper(x)], fid_labels, 'UniformOutput', false);
+    std_src_names = cellfun(@(x) sprintf('Source-%02d', sscanf(x, 's%d')), lower(src_labels), 'UniformOutput', false);
+    std_det_names = cellfun(@(x) sprintf('Detector-%02d', sscanf(x, 'd%d')), lower(det_labels), 'UniformOutput', false);
+
+    all_names = [std_fid_names; std_src_names; std_det_names];
+    all_types = [repmat({'FID'}, length(fid_labels), 1); ...
+                 repmat({'Source'}, length(src_labels), 1); ...
+                 repmat({'Detector'}, length(det_labels), 1)];
+    all_xyz   = [fid_coords; src_coords; det_coords];
+    all_units = repmat({'mm'}, length(all_names), 1);
+    
+    % Build registered 3D optodes table
+    reg_table = table(all_names, all_xyz(:,1), all_xyz(:,2), all_xyz(:,3), all_types, all_units, ...
+        'VariableNames', {'Name', 'X', 'Y', 'Z', 'Type', 'Units'});
+
+    % Promote 2D Probe to 3D Probe1020
+    if ~isa(raw(i).probe, 'nirs.core.Probe1020')
+        p3d = nirs.core.Probe1020();
+        p3d.link = raw(i).probe.link;
+        raw(i).probe = p3d;
+    end
+
+    % Assigning .optodes automatically populates .srcPos, .detPos, and .distances
+    raw(i).probe.optodes = reg_table;
+end
+
+% Command window updates
+fprintf('\n Montage application complete for all ptps \n')
+
+%% SECTION C
+
+% This section address the raw channel quality control (SNR Check) and
+% creates documentation on the participants
+
+%% X. Qualtiy Control: Signal-to-Noise Ratio (SNR) Thresholding
+
+% Command window updates
+fprintf('\n--- Initiating Quality Control (SNR) ---\n')
+
+% Methods: SNR < 3.0 (CV > 33.3%) BEFORE optical density conversion
+snr_threshold = 3.0;
+
+% Creates an empty struct with a list of the following items for ptps to be
+% added to for a complete quality assessment summary
+% Subject ID, Total Channels, Number of Short Channels, Number of Long
+% Channels, Number of Channels Pruned from SNR, and the Status of the ptp
+qa_summary = struct('Subject', {}, 'TotalChan', {}, 'ShortChan', {}, ...
+    'LongChan', {}, 'PrunedChan', {}, 'Status', {});
+
+% Prepare for a list of only the cleaned raw files
+% Just a copy of raw for now
+raw_clean = raw;
+
+% Loop through each of the raw participants
+for i = 1:length(raw)
+    % Collect subject id
+    s_id = raw(i).demographics('Subject');
+
+    % Collect the raw fnirs intensity matrix
+    d = raw(i).data;
+
+    % Collect all 98 channels 
+    link = raw(i).probe.link;
+
+    % Collect the distance of each channel
+    distances = raw(i).probe.distances;
+
+    % Find which channels are short separation channels
+    % Well not yet - establishes threshold
+    is_short = distances < 15;
+
+end
+
+% Command window updates
+fprintf('\n--- Quality Control Complete ---\n')
+fprintf('\n Quality Assessment Summary available at: X \n')
 
 % Load Conditions
 % All ptps analyzed under 'Spy' condition
 
 % (For later)
 % raw = nirs.util.addDemographics(raw, demo_table);
+
+% NOTE Cara mentions six ptps having unusable fNIRS data
+% NOTE that there are ROIs for sets of channels
+% (1) rostral prefrontal cortex; RPFC BA10
+% (2) left and right dorsolateral prefrontal cortex; DLPFC; BA 9/46
+% (3) Parietal cortex BA7 / 40
+% Exclude channels with poor signal quality
+% Report confidence intervals (?)
+% Fact check - 13 decoy dyads and 18 correct
+% motion artifact corrected wavelet-based approach Molavi & Dumont 2012
