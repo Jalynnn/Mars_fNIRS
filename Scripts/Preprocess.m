@@ -38,8 +38,15 @@ addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1') % Laptop
 
 %% 2. Load NIRS Files
 
+% Quote from Methods
+% "Hemodynamics data were recorded with NIRSport2 at 5.1 Hz from 8 short
+% channels, and 16 sources and 15 detectors, forming 41 long-separation 
+% channels over the bilateral prefrontal and parietal cortex."
+
+% All ptps analyzed under 'Spy' condition
+
 % Command Window Update
-fprintf('\n--- Load the NIRS Files for Each Ptp ---\n')
+fprintf('--- Load the NIRS Files for Each Ptp ---\n')
 
 % Add Data Directory
 % Directory = 'D:\GitHub\Mars_fNIRS\Data\fNIRS'; % PC
@@ -328,7 +335,43 @@ fprintf('\n Montage application complete for all ptps \n')
 % This section address the raw channel quality control (SNR Check) and
 % creates documentation on the participants
 
-%% X. Qualtiy Control: Signal-to-Noise Ratio (SNR) Thresholding
+% Quote from Methods
+% "Of the 64 participants in 32 dyads, 58 contributed usable fNIRS data
+% (i.e., six had poor signal quality and two experienced equipment issues). 
+% These 58 participants came from 31 dyads: 27 with both members and 4 
+% with one usable member.  Channels with poor signal quality were 
+% identified prior to optical density conversion and excluded per 
+% participant if the signal-to-noise ratio was below 3.0 (corresponding 
+% to a baseline coefficient of variation threshold of 33.3%)."
+
+%% 6. Qualtiy Control: Signal-to-Noise Ratio (SNR) Thresholding
+
+% Background info on the SNR section
+% For a while I used 50% of bad channels as a reason to remove ptps, even
+% though I won't be removing ptps
+
+% The SNR analysis run on all raw channels without trim produced only 25 usable
+% participants
+% 47 were excluded for poor signal quality; as in more than 50% of their
+% channels were excluded following the snr threshold
+% This is documented in PreprocessOutput/cohort_channel_snr_qa_summary.csv
+
+% The next step was trimming before the first event and after the last
+% event so that we are not considering the setup/takedown signals in the
+% snr analysis
+% 39 were excluded for poor signal quality instead of 47
+% This is documented in PreprocessOutput/snr_eventsOnly_qa_summary.csv
+
+% My next step is to use 'all' instead of 'any'
+% What this means: both wavelengths need to be under the 3.0 threshold to
+% remove the channel; not just one of them
+% 18 were excluded for poor signal quality following this change
+% This is documented in PreprocessOutput/3snr_eventsOnly_bothWavelengths_qa_summary.csv
+
+% It is thoroughly documented that 18 ptps have >50% bad channels but
+% rather than tampering with the threshold, and ensuring that SSCs were not
+% being marked as bad channels, the script goes on to remove the noisy
+% channels and not remove any ptps
 
 % Command window updates
 fprintf('\n--- Initiating Quality Control (SNR) ---\n')
@@ -339,9 +382,10 @@ snr_threshold = 3.0;
 % Creates an empty struct with a list of the following items for ptps to be
 % added to for a complete quality assessment summary
 % Subject ID, Total Channels, Number of Short Channels, Number of Long
-% Channels, Number of Channels Pruned from SNR, and the Status of the ptp
+% Channels, Number of Channels Pruned from SNR, the list of pruned channels, 
+% and the Status of the ptp
 qa_summary = struct('Subject', {}, 'TotalChan', {}, 'ShortChan', {}, ...
-    'LongChan', {}, 'PrunedChan', {}, 'Status', {});
+    'LongChan', {}, 'PrunedChan', {}, 'PrunedChanList', {}, 'Status', {});
 
 % Prepare for a list of only the cleaned raw files
 % Just a copy of raw for now
@@ -356,6 +400,7 @@ for i = 1:length(raw)
     d = raw(i).data;
 
     % Collect all 98 channels 
+    % 49 channels with 8 as SSCs; 41 long
     link = raw(i).probe.link;
 
     % Collect the distance of each channel
@@ -365,17 +410,239 @@ for i = 1:length(raw)
     % Well not yet - establishes threshold
     is_short = distances < 15;
 
+    % Actually compute SNR
+    % Previously, only the following three lines were required
+    % They were replaced once I wanted to keep snr within the events
+
+    % % mean intensity across all time points
+    % mean_intensity = mean(d, 1);
+    % 
+    % % Std across all time points
+    % std_intensity = std(d, 1);
+    % 
+    % % SNR = mean / std; add eps so avoid divide by zero
+    % chan_snr = mean_intensity ./ (std_intensity + eps);
+
+    % Use only the active task window:
+    % Pull each stimulus from the dictionary
+    stims = raw(i).stimulus;
+
+    % Sets the condition key
+    cond_keys = stims.keys;
+
+    % Create empty arrays for event timings
+    task_onsets = [];
+    task_ends   = [];
+
+    % Loop through all events
+    for k = 1:length(cond_keys)
+        % Collec the name of the event
+        c_name = cond_keys{k};
+
+        % Extract stimulus object
+        st = stims(c_name);
+
+        % Check that it exist in ptp session
+        if ~isempty(st.onset)
+            % Collect the onset
+            n_pts = length(st.onset);
+
+            % Collect the duration of the event
+            durs = st.dur;
+
+            % Case A: All occurrences have identical duration
+            if length(durs) == 1
+                durs = repmat(durs, n_pts, 1);
+            % Case B: Empty so duration is 0
+            elseif isempty(durs)
+                durs = zeros(n_pts, 1);
+            % Case C: Numeric vector - explicit duration
+            else
+                durs = durs(:);
+            end
+
+            % Append start times and calculated end times
+            task_onsets = [task_onsets; st.onset(:)];
+            task_ends   = [task_ends; st.onset(:) + durs];
+        end
+    end
+
+    % Convert timestamps (durations) to samples (can't just add 60 seconds)
+    if ~isempty(task_onsets)
+        first_sample = max(1, round(min(task_onsets) * raw(i).Fs));
+        last_sample  = min(size(d, 1), round(max(task_ends) * raw(i).Fs));
+        task_slice   = first_sample:last_sample;
+    else
+        % Fallback to full duration if no task keys found
+        task_slice   = 1:size(d, 1);
+    end
+
+    % Compute SNR strictly across the active task slice
+    d_active = d(task_slice, :);
+
+    % mean intensity across all time points
+    mean_intensity = mean(d_active, 1);
+
+    % Std across all time points
+    std_intensity = std(d_active, 1);
+
+    % SNR = mean / std; add eps so avoid divide by zero
+    chan_snr = mean_intensity ./ (std_intensity + eps);
+
+    % Since we are still working with raw data before conversion, we have
+    % each channel twice at 760 and 850 nm
+    % We can use unique to find each source/detector pair
+    % We want to evaluate rejection based on the pair
+    [unique_pairs, ~, pair_idx] = unique(link(:, 1:2), 'rows', 'stable');
+    num_pairs = size(unique_pairs, 1);
+
+    % fprintf('Number of unique pairs %d', num_pairs);
+    % To be sure that SSC are not pruned...
+    known_short_pairs = [
+        4, 16; 6, 17; 7, 18; 8, 19;
+        11, 20; 13, 21; 14, 22; 15, 23
+        ];
+
+    % which pairs are SSC pairs
+    % default set them all to false
+    pair_is_short = false(num_pairs, 1);
+
+    % loop through each pair
+    for p = 1:num_pairs
+        s_val = unique_pairs.source(p);
+        d_val = unique_pairs.detector(p);
+        if any(known_short_pairs(:, 1) == s_val & known_short_pairs(:, 2) == d_val)
+            pair_is_short(p) = true;
+        end
+    end
+
+    % Ok now evaluate by pair for rejection
+    % default set all pairs to false
+    bad_pair_mask = false(num_pairs, 1);
+
+    % for each of the pairs
+    for p = 1:num_pairs
+        % Never prune SSCs
+        if pair_is_short(p)
+            continue;
+        end
+
+        % identify rows corresponding to this pair we are at in the loop
+        rows_for_this_pair = (pair_idx == p);
+
+        % use 'any' for one or the either wavelength
+        % use 'all' if both wavelengths to exclude one channel
+        if all(chan_snr(rows_for_this_pair) < snr_threshold)
+            % Marks this channel as bad since it falls below the threshold
+            bad_pair_mask(p) = true;
+        end
+    end
+
+    % Document the quality assessment
+    num_short_pairs = sum(pair_is_short);
+    num_long_pairs = num_pairs - num_short_pairs;
+    num_bad_pairs = sum(bad_pair_mask);
+    surviving_long = num_long_pairs - num_bad_pairs;
+    
+    % Compile string labels of dropped channels (e.g., 'S1-D2; S4-D5')
+    bad_chan_names = {};
+    bad_pair_indices = find(bad_pair_mask);
+    for b = 1:length(bad_pair_indices)
+        bp = bad_pair_indices(b);
+        bad_chan_names{end+1} = sprintf('S%d-D%d', unique_pairs.source(bp), unique_pairs.detector(bp));
+    end
+    
+    qa_summary(i).Subject = s_id;
+    qa_summary(i).TotalChan = num_pairs;
+    qa_summary(i).ShortChan = num_short_pairs;
+    qa_summary(i).LongChan = num_long_pairs;
+    qa_summary(i).PrunedChan = num_bad_pairs;
+    qa_summary(i).PrunedChanList = strjoin(bad_chan_names, '; ');
+    
+    % Participant Usability Check:
+    % Cara noted 6 participants had poor signal quality. Which ones??
+    % OLD: If over 50% of a participant's long channels are pruned, flag as unusable.
+    % if num_bad_pairs > (0.50 * num_long_pairs)
+    %     qa_summary(i).Status = 'Excluded_PoorSignal';
+    % else
+    %     qa_summary(i).Status = 'Usable';
+    % end
+    % NEW: Retain all ptps with surviving data
+    if surviving_long == 0
+        qa_summary(i).Status = 'Excluded_ZeroChannels';
+    else
+        qa_summary(i).Status = 'Usable';
+    end
+
+    % Here is where we actually remove the channels!
+    % Map the bad physical pairs back to the full measurement rows (both wavelengths)
+    bad_measurement_rows = ismember(pair_idx, bad_pair_indices);
+    good_measurement_rows = ~bad_measurement_rows;
+    
+    % Slices the time-series matrix: deletes columns of noisy channels.
+    % This prevents NaN explosions during Wavelet decomposition and Bandpass filtering.
+    % Since I initially considered just making bad channels NaN
+    raw_clean(i).data = d(:, good_measurement_rows);
+    
+    % Slices the probe link table: deletes matching rows from channel metadata.
+    % Ensures probe.link row count perfectly equals size(raw_clean(i).data, 2).
+    raw_clean(i).probe.link = link(good_measurement_rows, :);
+
 end
+
+% For each ptp and their quality assessment move from struct to table
+qa_table = struct2table(qa_summary);
+
+% Display overview of the first 10 participants
+disp(qa_table(1:min(10, height(qa_table)), :));
+
+% Check total usability status across cohort
+num_usable = sum(strcmp(qa_table.Status, 'Usable'));
+num_excluded = sum(strcmp(qa_table.Status, 'Excluded_ZeroChannels'));
+fprintf('\nCohort Channel QC Complete: %d participants usable for GLM/ROI analysis | %d total hardware dropouts.\n', ...
+    num_usable, num_excluded);
+
+% Write CSV report into Derivatives folder
+qa_export_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Scripts\PreprocessOutput';
+if ~exist(qa_export_dir, 'dir')
+    mkdir(qa_export_dir);
+end
+writetable(qa_table, fullfile(qa_export_dir, '3snr_eventsOnly_allWavelengths_qa_summary.csv'));
 
 % Command window updates
 fprintf('\n--- Quality Control Complete ---\n')
-fprintf('\n Quality Assessment Summary available at: X \n')
+fprintf('\n Quality Assessment Summary available at: \n\t PreprocessOutput/cohort_channel_snr_qa_summary.csv \n\n')
 
-% Load Conditions
-% All ptps analyzed under 'Spy' condition
+%% Section D. Preprocessing Pipeline Construction w/ NIRS-Toolbox
 
-% (For later)
-% raw = nirs.util.addDemographics(raw, demo_table);
+% Classic optical density conversion, beer lambert law, wavelet filter, and
+% bandpass filter
+
+% Command window updates
+fprintf('\n--- Running Preprocessing Pipeline ---\n')
+
+%% 7. Optical Density * Modified Beer-Lambert Law (MBLL)
+
+% Convert raw optical intensity to optical density
+
+
+% Quote from Method
+% "Concentration changes in oxygenated (HbO) and deoxygenated hemoglobin
+% (HbR) were computed with the modified Beer–Lambert law, relative to 
+% the 60s fixation periods at the start and end of the session. Data were 
+% down-sampled to 1 Hz. Motion artifacts were identified and corrected 
+% with a Daubechies wavelet-based approach (Molavi & Dumont, 2012) 
+% implemented with NIRS Toolbox (Santosa et al., 2018). Physiological 
+% noise and slow drifts were attenuated with a Butterworth band-pass 
+% filter (0.01–0.2 Hz).  HbO and HbR results are reported separately. 
+% The activation signal for each of the channels over the session was 
+% then fit to an individual design matrix for each participant, using 
+% custom scripts calling the estimation functions from NIRS-ToolBox 
+% (Ye et al., 2009).  Channel positions were registered to MNI coordinates 
+% using digitization for spatial registration and assigned a priori to 
+% regions of interest (ROIs): rostral prefrontal cortex (RPFC; BA 10), 
+% left and right dorsolateral prefrontal cortex (DLPFC; BA 9/46), and 
+% parietal cortex (BA 7/40)."
 
 % NOTE Cara mentions six ptps having unusable fNIRS data
 % NOTE that there are ROIs for sets of channels

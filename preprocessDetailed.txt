@@ -8,6 +8,8 @@ addpaths
 
 nirs.loadDirectory
 
+organize the raw objects by ptp id
+
 3. Visual of .nirs File
 
 .draw for simple GUI version
@@ -17,15 +19,37 @@ nirs.loadDirectory
 load CSV file
 assign events to corresponding ptps
 in (1) the struct and (2) 'raw' variable
+Adds to the ptps by first removing lsl values and adding csv events into a stimulusEvent object set to raw(i).stimulus
 
 B. Montage Mapping & Digitization Registration
 
+5. Montage Application
+
+uses the digpts.txt file for each ptp
+reports if any missing
+pulls all labels and coords from digpts.txt
+organizes by fiducials/sources/detectors
+sorts them numerically just in case
+translates into nirs-toolbox registered optodes
+assigns the nirs-toolbox registered optodes to each ptp's raw obj
+specifically as 3D probe1020
+
 C. Raw Channel Quality Control (SNIR Check) & Documentation
+
+6. Qualtiy Control: Signal-to-Noise Ratio (SNR) Thresholding
+
+complete snr before optical density conversion
+snr threshold of 3.0 (CV > 33.3%)
+trims the ends of the raw data to only the events
+snr = mean / std + eps to avoid /0
+adds a qa summary for each ptp
+. Baseline SNR calculation (Ask Cara)
+. Prune bad long channels
 
 D. Preprocessing Pipeline Construction with NIRS-Toolbox
 
-. Baseline SNR calculation
-. Prune bad long channels
+
+
 . Optical Density Conversion
 . Motion artifact correct wavelet filter (No TDDR - just wavelet)
 . Beer Lambert Law 

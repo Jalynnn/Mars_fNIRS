@@ -6,3 +6,8 @@
 % Input: Output from preprocess.m; event markers; bad channels from
 % preprocess.m
 % Output: epochs 3d matrics - channels x timepoints x trials
+
+% Quote from Methods
+% "Short-separation channel time-series were included as first-level
+% nuisance regressors to additionally control for superficial systemic 
+% artifacts."
