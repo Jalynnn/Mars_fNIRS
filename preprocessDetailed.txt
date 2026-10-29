@@ -1,61 +1,86 @@
-A. Path Setup & File Discovery
+Section A. Path Setup & File Discovery
 
 1. Set MATLAB Paths
 
-addpaths
+- Add NIRS-Toolbox, SPM12, and NIRS-SPM to MATLAB search paths
+- Be careful when using 'genpath'
 
 2. Load NIRS Files / Metadata Sanity Check
 
-nirs.loadDirectory
+- nirs.io.loadDirectory imports all raw .nirs files into raw array
+- Parse by subject ID to sort raw objects numerically
+- Display visual sanity check (uses LSL triggers for events instead of CSV)
 
-organize the raw objects by ptp id
+3. Attach demographics metadata
 
-3. Visual of .nirs File
-
-.draw for simple GUI version
+- Read fnirs_demogrpahics_spyV4.csv containing dyad, individual, and task metrics
+- Match subject id using regex
+- Map all raw demographics with columns
 
 4. Extract Events / Trigger Files
 
-load CSV file
-assign events to corresponding ptps
-in (1) the struct and (2) 'raw' variable
-Adds to the ptps by first removing lsl values and adding csv events into a stimulusEvent object set to raw(i).stimulus
+- Load spy_events_all_sessions.csv containing experimental task timings
+- Clear LSL triggers from imported raw objects
+- Covert the csv values to onsets/durations
+- Populate nirs.design.StimulusEvents for each ptp
+- Store events per ptp in both struct and raw stimulus
 
-B. Montage Mapping & Digitization Registration
+
+
+Section B. Montage Mapping & Digitization Registration
 
 5. Montage Application
 
-uses the digpts.txt file for each ptp
-reports if any missing
-pulls all labels and coords from digpts.txt
-organizes by fiducials/sources/detectors
-sorts them numerically just in case
-translates into nirs-toolbox registered optodes
-assigns the nirs-toolbox registered optodes to each ptp's raw obj
-specifically as 3D probe1020
+- Locate subject specific digpts.txt digitization files
+- Parse coordinates and fiducials/sources/detectors
+- Sort optodes numerically and format into registered optodes
+- Convert 2D probes to Probe1020 and assign 3D coords for raw objs
 
-C. Raw Channel Quality Control (SNIR Check) & Documentation
+
+
+Section C. Raw Channel Quality Control (SNR Check) & Documentation
 
 6. Qualtiy Control: Signal-to-Noise Ratio (SNR) Thresholding
 
-complete snr before optical density conversion
-snr threshold of 3.0 (CV > 33.3%)
-trims the ends of the raw data to only the events
-snr = mean / std + eps to avoid /0
-adds a qa summary for each ptp
-. Baseline SNR calculation (Ask Cara)
-. Prune bad long channels
-
-D. Preprocessing Pipeline Construction with NIRS-Toolbox
+- Compute channel SNR (mean / std) on raw intensities only in the active task window
+- Protect all 8 SSCs from rejection
+- Flag long channels where both wavelengths fall below SNR < 3.0
+- Prune rejected channels from raw_clean.data and slice probe.link
+- Log channel counts and usability status to QA summary CSV
 
 
 
-. Optical Density Conversion
-. Motion artifact correct wavelet filter (No TDDR - just wavelet)
-. Beer Lambert Law 
-. Downsample
-. Bandpass filter
+Section D. Preprocessing Pipeline Construction with NIRS-Toolbox
 
-E. Event Injection & Synchronization
+7. Optical Density * Modified Beer-Lambert Law (MBLL)
 
-F. Export Clean Data & Quality Assessment
+- Convert raw light intensities to optical density
+- Compute HbO and HbR concentration changes
+- Added in the fix with NaN for NaNs generated during matrix inversion
+
+8. Resample to 1 Hz
+
+- Resample continuous hemodynamic time series to 1.0 Hz
+
+9. Wavelet-Based Motion Artifact Correction (Molavi & Dumont, 2012)
+
+- Correct motion artifacts via Daubechies wavelets
+- No TDDR
+- Install Wavelet Toolbox (Readme has instructions)
+
+10. Bandpass Filter (0.01 to 0.20 Hz)
+
+- Attenuate physio noise with 0.01-0.20 Hz Butterworth Bandpass filter
+
+11. Execute
+
+- Run jobs
+
+
+
+Section E. Export Clean Data & Quality Assessment
+
+%% 12. Save Preprocess Data
+
+- Save preprocessed cohort Hb array and qa-table using -v7.3 .mat for GLM
+- Exports to derivatives folder
