@@ -111,13 +111,8 @@ raw = raw(sort_order);
 % fprintf('Raw(1) is now: %s\n', raw(1).demographics('Subject'));
 
 % Command Window Update
-fprintf('\n--- Loading Participants Complete ---\n')
-
-%% 3. Visual of .nirs File
-
-% Command Window Update
-fprintf('\n--- Providing a Visual of Raw(1) ---\n')
-fprintf('\nFor Better Visuals; Visualize_Dyads.m\n')
+fprintf('\n Providing a Visual of Raw(1) \n')
+fprintf('\n For Better Visuals; Visualize_Dyads.m \n')
 
 % Uses built-in GUI
 % This version simply outputs the 49 channels x 2 wavelengths
@@ -126,6 +121,50 @@ raw(1).draw();
 
 % Use the Visualize_Events.m script for the visual with the 
 % events provided by the CSV file
+% Alt: Visualize_Dyads.m
+
+% Command Window Update
+fprintf('\n--- Loading Participants Complete ---\n')
+
+%% 3. Attach Demographics Metadata
+
+demo_file = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Demographics\fnirs_demographics_spyV4.csv';
+demo_table = readtable(demo_file);
+
+for i = 1:length(raw)
+    % Extract current subj id
+    subj_val = raw(i).demographics('Subject');
+
+    % Convert to numeric
+    matched_id = regexp(subj_val, '(?<=P)\d+', 'match', 'once');
+    subj_id = str2double(matched_id);
+
+    % Find matching row
+    row_idx = find(demo_table.participant_id == subj_id, 1);
+
+    if ~isempty(row_idx)
+        % Core identifiers & dyad structure
+        raw(i).demographics('bids_id') = sprintf('sub-%02d', demo_table.participant_id(row_idx));
+        raw(i).demographics('participant_id') = demo_table.participant_id(row_idx);
+        raw(i).demographics('session_id') = demo_table.session_id(row_idx); % Dyad / Team ID
+        raw(i).demographics('scenario') = char(demo_table.scenario(row_idx));
+        
+        % Individual-level covariates
+        raw(i).demographics('age') = demo_table.age(row_idx);
+        raw(i).demographics('biosex') = demo_table.biosex(row_idx);
+        raw(i).demographics('gender') = demo_table.gender(row_idx);
+        
+        % Team & task performance metrics (RQ1 / RQ2)
+        raw(i).demographics('team_performance') = demo_table.team_performance(row_idx);
+        raw(i).demographics('intended_both') = demo_table.intended_both(row_idx);
+        raw(i).demographics('exec_cert_final') = demo_table.exec_cert_final(row_idx);
+    else
+        warning('Participant ID %d not found in demographics CSV.', subj_id);
+    end
+end
+
+% Command window update
+fprintf('Demographics attached for %d participants.\n', length(raw));
 
 %% 4. Extract Events
 
@@ -607,11 +646,11 @@ qa_export_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Scripts\PreprocessO
 if ~exist(qa_export_dir, 'dir')
     mkdir(qa_export_dir);
 end
-writetable(qa_table, fullfile(qa_export_dir, '3snr_eventsOnly_allWavelengths_qa_summary.csv'));
+writetable(qa_table, fullfile(qa_export_dir, '3snr_eventsOnly_bothWavelengths_qa_summary.csv'));
 
 % Command window updates
 fprintf('\n--- Quality Control Complete ---\n')
-fprintf('\n Quality Assessment Summary available at: \n\t PreprocessOutput/cohort_channel_snr_qa_summary.csv \n\n')
+fprintf('\n Quality Assessment Summary available at: \n\t PreprocessOutput/3snr_eventsOnly_bothWavelengths_qa_summary.csv \n\n')
 
 %% Section D. Preprocessing Pipeline Construction w/ NIRS-Toolbox
 
@@ -623,33 +662,75 @@ fprintf('\n--- Running Preprocessing Pipeline ---\n')
 
 %% 7. Optical Density * Modified Beer-Lambert Law (MBLL)
 
-% Convert raw optical intensity to optical density
-
-
 % Quote from Method
 % "Concentration changes in oxygenated (HbO) and deoxygenated hemoglobin
 % (HbR) were computed with the modified Beer–Lambert law, relative to 
-% the 60s fixation periods at the start and end of the session. Data were 
-% down-sampled to 1 Hz. Motion artifacts were identified and corrected 
-% with a Daubechies wavelet-based approach (Molavi & Dumont, 2012) 
-% implemented with NIRS Toolbox (Santosa et al., 2018). Physiological 
-% noise and slow drifts were attenuated with a Butterworth band-pass 
-% filter (0.01–0.2 Hz).  HbO and HbR results are reported separately. 
-% The activation signal for each of the channels over the session was 
-% then fit to an individual design matrix for each participant, using 
-% custom scripts calling the estimation functions from NIRS-ToolBox 
-% (Ye et al., 2009).  Channel positions were registered to MNI coordinates 
-% using digitization for spatial registration and assigned a priori to 
-% regions of interest (ROIs): rostral prefrontal cortex (RPFC; BA 10), 
-% left and right dorsolateral prefrontal cortex (DLPFC; BA 9/46), and 
-% parietal cortex (BA 7/40)."
+% the 60s fixation periods at the start and end of the session."
 
-% NOTE Cara mentions six ptps having unusable fNIRS data
-% NOTE that there are ROIs for sets of channels
-% (1) rostral prefrontal cortex; RPFC BA10
-% (2) left and right dorsolateral prefrontal cortex; DLPFC; BA 9/46
-% (3) Parietal cortex BA7 / 40
-% Exclude channels with poor signal quality
-% Report confidence intervals (?)
-% Fact check - 13 decoy dyads and 18 correct
-% motion artifact corrected wavelet-based approach Molavi & Dumont 2012
+% Convert raw optical intensity to optical density
+jobs = nirs.modules.OpticalDensity();
+jobs = nirs.modules.BeerLambertLaw(jobs);
+
+% Added! This is following ptp30 with the following error
+% >>> FAILED at Participant Index 24 (2025-11-25-P30-redo):
+% Error: The vector of time instants must have at least two elements after all missing values have been removed.
+% Raw Data Stats -> Non-positive values: 0 | NaNs: 0 | Min: 3.2e-07 | Max: 0.105412
+% Note that this was initially added before optical density/BMLL but...
+% It was MBLL that generated 131,000+ NaNs
+jobs = nirs.modules.FixNaNs(jobs);
+
+%% 8. Resample to 1 Hz
+
+% Quote from Method
+% "Data were down-sampled to 1 Hz."
+
+jobs = nirs.modules.Resample(jobs);
+jobs.Fs = 1.0;
+
+%% 9. Wavelet-Based Motion Artifact Correction (Molavi & Dumont, 2012)
+
+% Quote from Method
+% "Motion artifacts were identified and corrected 
+% with a Daubechies wavelet-based approach (Molavi & Dumont, 2012) 
+% implemented with NIRS Toolbox (Santosa et al., 2018).
+
+jobs = nirs.modules.WaveletFilter(jobs);
+
+%% 10. Bandpass Filter (0.01 to 0.20 Hz)
+
+% Quote from Method
+% "Physiological noise and slow drifts were attenuated with a Butterworth band-pass 
+% filter (0.01–0.2 Hz)." 
+
+jobs = nirs.modules.BandPassFilter(jobs);
+jobs.highpass = 0.01;
+jobs.lowpass = 0.30;
+
+%% 11. Execute
+
+Hb = jobs.run(raw_clean);
+
+% Command window updates
+fprintf('\n--- Preprocessing Pipeline Complete ---\n')
+
+%% Section E
+
+% The goal is to export the cleaned data to avoid running preprocess.m
+% again
+
+%% 12. Save Preprocess Data
+
+% Folder to save the export to
+export_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Derivatives';
+
+% Name of the output file
+save_file = fullfile(export_dir, 'Hb_preprocessed_cohort.mat');
+
+% Command window update
+fprintf('Saving preprocessed cohort of data to %s ... \n', save_file)
+
+% -v7.3 tells MATLAB to use HDF5-based file format instead of old v7
+save(save_file, 'Hb', 'qa_table', '-v7.3');
+
+% Command window update
+fprintf('Saved succcessfully!\n')

@@ -30,3 +30,17 @@
 % "For Second-Level Modeling: The models for RQ1 and RQ2 will need
 % dyad-level clustering (random intercepts for DyadID in an LMM) to 
 % handle the 27 paired and 4 single teammates without violating independence."
+
+% Quote from Method
+% "HbO and HbR results are reported separately."
+
+% Quote from Method
+% "Channel positions were registered to MNI coordinates 
+% using digitization for spatial registration and assigned a priori to 
+% regions of interest (ROIs): rostral prefrontal cortex (RPFC; BA 10), 
+% left and right dorsolateral prefrontal cortex (DLPFC; BA 9/46), and 
+% parietal cortex (BA 7/40)."
+
+% Quote from Method
+% "Smaller effects are therefore reported with confidence intervals and
+% interpreted as imprecise rather than absent."
