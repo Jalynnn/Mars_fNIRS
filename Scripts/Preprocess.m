@@ -1,13 +1,9 @@
 % Preprocess.m
 % Jalynn Nicoly September 29th, 2026
-% This is script 1/4 to load and clean the fNIRS data
-% Load; Digitize; BLL; Bandpass; Check Quality; Export as .fif? Save
-% variables too; Motion artifact corrects (TDDR?); Short separation
-% channels; Prunes bad channels; applies wavelet motion correction;
-% downsamples to 1 hz; filters 0.01 to 0.2 Hz
-% Input: Raw .nirs data; digitization .txt files;
-% Output: Cleaned time series .mat? .fif?; File of excluded bad channels;
-% Signal to noise ratio values for quality diagnostics
+% This is script 1/4 with a focus on loading and cleaning the fNIRS data
+% Input: Raw .nirs data; digitization .txt files; Experimental CSVs
+% Task: Complete preprocessing pipeline
+% Output: Cleaned time series .mat; QA CSV Summary;
 
 %% SECTION A
 
@@ -704,7 +700,10 @@ jobs = nirs.modules.WaveletFilter(jobs);
 
 jobs = nirs.modules.BandPassFilter(jobs);
 jobs.highpass = 0.01;
-jobs.lowpass = 0.30;
+jobs.lowpass = 0.20;
+
+% ahh it was apply downsample again here
+jobs.do_downsample = false;
 
 %% 11. Execute
 
@@ -725,6 +724,14 @@ export_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Derivatives';
 
 % Name of the output file
 save_file = fullfile(export_dir, 'Hb_preprocessed_cohort.mat');
+
+% Force delete old container if it exists
+% Everytime you rerun preprocess, it overwrote what was already there and
+% would rerun job so my Fs got to like .4 at one point
+if exist(save_file, 'file')
+    fprintf('Removing old .mat file to prevent HDF5 corruption/appending...\n');
+    delete(save_file);
+end
 
 % Command window update
 fprintf('Saving preprocessed cohort of data to %s ... \n', save_file)
