@@ -23,13 +23,16 @@ warning('off', 'MATLAB:dispatcher:nameConflict');
 %% 1. Set MATLAB Paths
 
 % Add NIRS Toolbox to MATLAB Path
-addpath(genpath('C:\Users\Jalynn\Documents\GitHub\nirs-toolbox')) % Laptop
+% addpath(genpath('C:\Users\Jalynn\Documents\GitHub\nirs-toolbox')) % Laptop
+addpath(genpath('D:\GitHub\nirs-toolbox')) % PC
 
 % Add NIRS SPM 
-addpath('C:\Users\Jalynn\Documents\GitHub\spm12') % Laptop
+% addpath('C:\Users\Jalynn\Documents\GitHub\spm12') % Laptop
+addpath('D:\GitHub\spm12') % PC
 
 % https://www.nitrc.org/projects/nirs_spm/
-addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1') % Laptop
+% addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1') % Laptop
+addpath('D:\GitHub\NIRS_SPM_v4_r1') % PC
 
 %% 2. Load Preprocessed Cohort Data
 
@@ -37,7 +40,8 @@ addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1') % Laptop
 fprintf('\n--- Loading Preprocessed Cohort Data ---\n')
 
 % Preprocess.m saved to Derivatives folder with following file name
-derivatives_dir = "C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Derivatives";
+% derivatives_dir = "C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Derivatives"; % Laptop
+derivatives_dir = 'D:\GitHub\Mars_fNIRS\Data\Derivatives'; % PC
 load_file = fullfile(derivatives_dir, "Hb_preprocessed_cohort.mat");
 
 % Error checking if file exists yet
