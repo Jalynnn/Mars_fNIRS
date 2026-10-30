@@ -31,7 +31,7 @@ addpath('C:\Users\Jalynn\Documents\GitHub\spm12') % Laptop
 % https://www.nitrc.org/projects/nirs_spm/
 addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1') % Laptop
 
-%% 2. Load Preprocessed Cohort Data
+%% 2. Load Preprocessed Cohort Data & Prune Execution/Debrief
 
 % Command Window Update
 fprintf('\n--- Loading Preprocessed Cohort Data ---\n')
@@ -64,6 +64,38 @@ fprintf('Successfully loaded %d participant recordings.\n', num_ptps);
 % Verification check ran in command window with export saved in
 % FirstLevelOutput folder
 
+% Command window update
+fprintf('\n--- Pruning Unwanted Conditions Across Cohort ---\n');
+
+% Confirm with Cara
+% My understanding is we removed both execution and debrief
+conditions_to_prune = {'execution', 'debrief'};
+
+% Set default to 0
+total_pruned = 0;
+
+% For each ptp / recall saved in Hb instead of raw_clean
+for i = 1:length(Hb)
+    % for each condition/stimulus found
+    for c = 1:length(conditions_to_prune)
+        % collect the name of current condition
+        cond_name = conditions_to_prune{c};
+        
+        % if it matches pruned conditions...
+        if Hb(i).stimulus.iskey(cond_name)
+            % Remove the condition
+            Hb(i).stimulus = Hb(i).stimulus.remove(cond_name);
+
+            % Increase the count by 1
+            total_pruned = total_pruned + 1;
+        end
+    end
+end
+
+% Command window update
+fprintf('Successfully pruned %d condition instances across %d participants.\n', ...
+    total_pruned, length(Hb));
+
 %% Section B
 
 % The focus of this section is on stimulus basis configuration for
@@ -89,7 +121,7 @@ block_conditions = { ...
     'enroute_decoy_site', ... % Execution
     'at_true_site', ... % Execution
     'at_decoy_site', ... % Execution
-    'execution' ...
+    % 'execution' ... % EXCLUDED
 };
 
 % Transient Task Events -> Convolved with Canonical HRF + Temporal Derivative
@@ -110,11 +142,11 @@ baseline_conditions = { ...
     'null_block', ... % Execution
     'null_event', ... % Execution
     'null_event_prespam', ... % Execution
-    'debrief' ...
+    % 'debrief' ... % EXCLUDED
 };
 
 % Since we are no longer using the 'execution' and 'debrief' blocks, also
-% necessary to remove them from the ptps
+% necessary to remove them from the ptps which is done in step 2
 
 %% 3a. Branch 1: HRF
 
@@ -269,62 +301,8 @@ fprintf('--- Section B Setup Complete (Steps 3, 4, and 5) ---\n\n');
 
 
 
-% %% Pre-GLM Correction: Resolve Temporal Collinearity for Near-Concurrent Events
-% % At Fs = 1.0 Hz, events within <1.0s collapse into the same discrete time bin.
-% % When convolved with identical canonical basis + temporal derivatives,
-% % the resulting columns become collinear (r = 1.0), causing checkRank failure.
-% % Apply a minimal +1.0s jitter to tricorder_switch when colliding with spam_pop_up.
-% 
-% fprintf('\n--- Evaluating Event Timing Separation Across Cohort ---\n');
-% for i = 1:length(Hb)
-%     st = Hb(i).stimulus;
-%     if st.iskey('spam_pop_up') && st.iskey('tricorder_switch')
-%         s_on = st('spam_pop_up').onset;
-%         t_on = st('tricorder_switch').onset;
-% 
-%         if ~isempty(s_on) && ~isempty(t_on)
-%             dt_matrix = abs(s_on(:) - t_on(:)');
-%             min_dt = min(dt_matrix(:));
-% 
-%             if min_dt < 1.0
-%                 fprintf('  Adjusting Participant %02d: min temporal delta = %.2fs (<1.0s threshold).\n', i, min_dt);
-%                 tri_stim = st('tricorder_switch');
-%                 tri_stim.onset = tri_stim.onset + 1.0;
-%                 Hb(i).stimulus('tricorder_switch') = tri_stim;
-%                 fprintf('  -> Shifted tricorder_switch by +1.0s to resolve discrete bin collision.\n');
-%             end
-%         end
-%     end
-% end
-% 
-% %% 6a. Execute Branch 1 (Primary Model: Mixed Block/Event HRF)
-% fprintf('\n--- Running Branch 1: Mixed Block/Event Canonical HRF GLM ---\n');
-% fprintf('Fitting %d participants with AR-IRLS...\n', num_ptps);
-% t_hrf_start = tic;
-% 
-% SubjStats_HRF = job_hrf.run(Hb);
-% 
-% t_hrf_elapsed = toc(t_hrf_start);
-% fprintf('Branch 1 complete: %d SubjStats generated in %.2f minutes (%.1f s/ptp).\n', ...
-%     length(SubjStats_HRF), t_hrf_elapsed / 60, t_hrf_elapsed / num_ptps);
-% 
-% %% 6b. Execute Branch 2 (Model Validation / Shape Evaluation: FIR)
-% fprintf('\n--- Running Branch 2: Finite Impulse Response (FIR) GLM ---\n');
-% fprintf('Fitting 23-bin impulse deconvolution across %d participants...\n', num_ptps);
-% t_fir_start = tic;
-% 
-% SubjStats_FIR = job_fir.run(Hb);
-% 
-% t_fir_elapsed = toc(t_fir_start);
-% fprintf('Branch 2 complete: %d SubjStats generated in %.2f minutes (%.1f s/ptp).\n', ...
-%     length(SubjStats_FIR), t_fir_elapsed / 60, t_fir_elapsed / num_ptps);
-% 
-% %% 6c. Section C Sanity Verification
-% fprintf('\n--- Section C Verification Check ---\n');
-% fprintf('SubjStats_HRF array size: [%s]\n', num2str(size(SubjStats_HRF)));
-% fprintf('SubjStats_FIR array size: [%s]\n', num2str(size(SubjStats_FIR)));
-% fprintf('HRF variables on SubjStats(1): %d beta rows estimated.\n', height(SubjStats_HRF(1).table));
-% fprintf('--- Section C Execution Complete ---\n\n');
+
+
 
 %% Section C. First-Level Statistical Estimation (AR-IRLS)
 fprintf('\n============================================================\n');
@@ -472,3 +450,109 @@ fprintf('--- Section C Execution Complete ---\n\n');
 % for k = 1:length(transient_events)
 %     j_glm.basis(transient_events{k}) = nirs.design.basis.CanonicalWithDeriv();
 % end
+
+
+%% Section D. First-Level Baseline Contrasts & Hypothesis Testing
+fprintf('\n============================================================\n');
+fprintf('  SECTION D: First-Level Baseline Contrasts (Task vs Baseline)\n');
+fprintf('============================================================\n');
+
+% Define the core task conditions of interest to contrast against baseline
+contrast_tasks = { ...
+    'planning_individual', ...
+    'planning_team', ...
+    'enroute_true_site', ...
+    'enroute_decoy_site', ...
+    'at_true_site', ...
+    'at_decoy_site', ...
+    'spam_pop_up', ...
+    'tricorder_switch', ...
+    'status_check' ...
+};
+
+% Container for all participant contrast stats
+% Structure: Contrasts.(task_name) = array of ChannelStats / SubjStats
+Contrasts_HRF = struct();
+for t = 1:length(contrast_tasks)
+    Contrasts_HRF.(contrast_tasks{t}) = repmat(nirs.core.ChannelStats, num_ptps, 1);
+end
+
+fprintf('Computing first-level contrasts across %d participants...\n', num_ptps);
+t_contrast_start = tic;
+
+for i = 1:num_ptps
+    stats_i = SubjStats_HRF(i);
+    cond_names = stats_i.conditions; % Unique condition labels in the GLM fit
+    
+    % -------------------------------------------------------------
+    % 1. Determine Dynamic Baseline for Participant i
+    % -------------------------------------------------------------
+    % Preference order: fixation_baseline_start > fixation_baseline_end > planning_baseline
+    if any(contains(cond_names, 'fixation_baseline_start'))
+        base_root = 'fixation_baseline_start';
+    elseif any(contains(cond_names, 'fixation_baseline_end'))
+        base_root = 'fixation_baseline_end';
+        fprintf('  [Ptp %02d] Using fallback baseline: fixation_baseline_end\n', i);
+    elseif any(contains(cond_names, 'planning_baseline'))
+        base_root = 'planning_baseline';
+        fprintf('  [Ptp %02d] Using fallback baseline: planning_baseline\n', i);
+    else
+        warning('Participant %02d has no valid baseline condition. Skipping contrasts.', i);
+        continue;
+    end
+    
+    % Locate the exact baseline canonical label
+    % (Matches either 'base_root' or 'base_root:canonical')
+    base_match = strcmp(cond_names, base_root) | strcmp(cond_names, [base_root ':canonical']);
+    base_idx = find(base_match, 1);
+    
+    if isempty(base_idx)
+        warning('Participant %02d: Baseline canonical regressor not found.', i);
+        continue;
+    end
+    
+    % -------------------------------------------------------------
+    % 2. Evaluate Each Task Condition vs Selected Baseline
+    % -------------------------------------------------------------
+    for t = 1:length(contrast_tasks)
+        task_root = contrast_tasks{t};
+        
+        % Locate task canonical regressor (strictly ignoring :derivative)
+        task_match = strcmp(cond_names, task_root) | strcmp(cond_names, [task_root ':canonical']);
+        task_idx = find(task_match, 1);
+        
+        if isempty(task_idx)
+            % Event did not occur for this participant (e.g., tricorder_switch)
+            continue;
+        end
+        
+        % Construct sparse contrast vector (1 x num_conditions)
+        % +1 for Task Canonical, -1 for Baseline Canonical, 0 for derivatives/nuisance
+        c = zeros(1, length(cond_names));
+        c(task_idx) = 1.0;
+        c(base_idx) = -1.0;
+        
+        % Execute hypothesis test via NIRS-Toolbox SubjStats.ttest()
+        try
+            c_stats = stats_i.ttest(c);
+            c_stats.description = sprintf('%s - %s', task_root, base_root);
+            Contrasts_HRF.(task_root)(i) = c_stats;
+        catch ME
+            fprintf('  [Ptp %02d] Contrast %s failed: %s\n', i, task_root, ME.message);
+        end
+    end
+end
+
+t_contrast_elapsed = toc(t_contrast_start);
+fprintf('\n--- Section D Contrasts Complete in %.2f seconds ---\n', t_contrast_elapsed);
+
+%% Section E. Save Results to Derivatives
+save_dir = fullfile(derivatives_dir, 'FirstLevel_Results');
+if ~exist(save_dir, 'dir')
+    mkdir(save_dir);
+end
+
+results_file = fullfile(save_dir, 'FirstLevel_Cohort_Stats.mat');
+fprintf('Saving results to: %s ...\n', results_file);
+save(results_file, 'SubjStats_HRF', 'SubjStats_FIR', 'Contrasts_HRF', '-v7.3');
+fprintf('Saved successfully. FirstLevel.m complete.\n\n');
