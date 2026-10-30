@@ -44,3 +44,30 @@
 % Quote from Method
 % "Smaller effects are therefore reported with confidence intervals and
 % interpreted as imprecise rather than absent."
+
+% 4. Items for GroupLevel.m (Documented in the Text)
+% These specifications do not block FirstLevel.m, but are explicitly required for the second-level script:
+% 
+% ROIs to Define:
+% 
+% Rostral PFC (RPFC; BA 10)
+% 
+% Left & Right DLPFC (BA 9/46)
+% 
+% Parietal Cortex (BA 7/40)
+% 
+% Covariates to Include in All Group Models:
+% 
+% Age (mean-centered)
+% 
+% Sex (dummy-coded: 0 = female, 1 = male)
+% 
+% Second (binary: 1 = visited a second destination, 0 = did not)
+% 
+% Time (elapsed execution time at final status report; included in individual performance models for RQ2)
+% 
+% Random Effects:
+% 
+% Random intercept for dyad ((1 | session_id)) across all models
+% 
+% Random intercept for participant nested within dyad ((1 | session_id/bids_id)) for RQ3

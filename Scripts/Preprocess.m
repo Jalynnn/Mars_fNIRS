@@ -169,8 +169,8 @@ fprintf('Demographics attached for %d participants.\n', length(raw));
 fprintf('\n--- Extracting Events for Each Participant ---\n')
 
 % Load Events File
-event_csv_path = 'D:\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessions(in).csv'; % PC
-% event_csv_path = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV3'; % Laptop
+event_csv_path = 'D:\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV3.csv'; % PC
+% event_csv_path = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV3.csv'; % Laptop
 event_table = readtable(event_csv_path);
 
 % Event data will be grouped by ptp stored in a struct
@@ -639,7 +639,8 @@ fprintf('\nCohort Channel QC Complete: %d participants usable for GLM/ROI analys
     num_usable, num_excluded);
 
 % Write CSV report into Derivatives folder
-qa_export_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Scripts\PreprocessOutput';
+qa_export_dir = 'D:\GitHub\Mars_fNIRS\Scripts\PreprocessOutput'; 
+% qa_export_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Scripts\PreprocessOutput'; % Laptop
 if ~exist(qa_export_dir, 'dir')
     mkdir(qa_export_dir);
 end

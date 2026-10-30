@@ -80,6 +80,8 @@ total_pruned = 0;
 
 % For each ptp / recall saved in Hb instead of raw_clean
 for i = 1:length(Hb)
+    % Collect key
+    st_keys = Hb(i).stimulus.keys;
     % for each condition/stimulus found
     for c = 1:length(conditions_to_prune)
         % collect the name of current condition
@@ -99,6 +101,103 @@ end
 % Command window update
 fprintf('Successfully pruned %d condition instances across %d participants.\n', ...
     total_pruned, length(Hb));
+
+%% AI added for limiting events to only their first instance
+
+%% 2b. Restrict Key Tasks to First Instance & Separate Subsequent Visits/Reports
+fprintf('\n--- Restricting Analysis to First Instance & Isolating Subsequent Occurrences ---\n');
+
+for i = 1:length(Hb)
+    st = Hb(i).stimulus;
+    
+    % ---------------------------------------------------------------------
+    % A. First Status Report vs. Subsequent Reports
+    % ---------------------------------------------------------------------
+    if st.iskey('status_check')
+        sc = st('status_check');
+        if length(sc.onset) > 1
+            % Create nuisance object for subsequent check-ins (index 2:end)
+            sc_sub = nirs.design.StimulusEvents();
+            sc_sub.name  = 'status_check_subsequent';
+            sc_sub.onset = sc.onset(2:end);
+            sc_sub.dur   = sc.dur(2:end);
+            sc_sub.amp   = ones(size(sc_sub.onset));
+            Hb(i).stimulus('status_check_subsequent') = sc_sub;
+            
+            % Restrict primary regressor strictly to the first instance
+            sc.onset = sc.onset(1);
+            sc.dur   = sc.dur(1);
+            sc.amp   = 1.0;
+            Hb(i).stimulus('status_check') = sc;
+        end
+    end
+    
+    % ---------------------------------------------------------------------
+    % B. First Detector Switch vs. Subsequent Switches
+    % ---------------------------------------------------------------------
+    if st.iskey('tricorder_switch')
+        ts = st('tricorder_switch');
+        if length(ts.onset) > 1
+            ts_sub = nirs.design.StimulusEvents();
+            ts_sub.name  = 'tricorder_switch_subsequent';
+            ts_sub.onset = ts.onset(2:end);
+            ts_sub.dur   = ts.dur(2:end);
+            ts_sub.amp   = ones(size(ts_sub.onset));
+            Hb(i).stimulus('tricorder_switch_subsequent') = ts_sub;
+            
+            ts.onset = ts.onset(1);
+            ts.dur   = ts.dur(1);
+            ts.amp   = 1.0;
+            Hb(i).stimulus('tricorder_switch') = ts;
+        end
+    end
+    
+    % ---------------------------------------------------------------------
+    % C. First Point of Arrival (True vs Decoy) & En-Route
+    % ---------------------------------------------------------------------
+    has_true  = st.iskey('at_true_site');
+    has_decoy = st.iskey('at_decoy_site');
+    
+    if has_true && has_decoy
+        % Dyad visited BOTH sites: determine which site occurred first in time
+        t_true  = st('at_true_site').onset(1);
+        t_decoy = st('at_decoy_site').onset(1);
+        
+        if t_true < t_decoy
+            % Correct site was visited first! Decoy site is the second destination
+            second_dest_blocks = {'at_decoy_site', 'enroute_decoy_site'};
+        else
+            % Decoy site was visited first! True site is the second destination
+            second_dest_blocks = {'at_true_site', 'enroute_true_site'};
+        end
+        
+        % Pool second destination blocks into a nuisance regressor
+        sec_onsets = [];
+        sec_durs   = [];
+        for b = 1:length(second_dest_blocks)
+            b_name = second_dest_blocks{b};
+            if st.iskey(b_name)
+                b_stim = st(b_name);
+                sec_onsets = [sec_onsets; b_stim.onset(:)];
+                sec_durs   = [sec_durs;   b_stim.dur(:)];
+                Hb(i).stimulus = Hb(i).stimulus.remove(b_name); % Remove from primary task set
+            end
+        end
+        
+        if ~isempty(sec_onsets)
+            [sec_onsets, s_idx] = sort(sec_onsets);
+            sec_durs = sec_durs(s_idx);
+            
+            sec_stim = nirs.design.StimulusEvents();
+            sec_stim.name  = 'site_second_destination';
+            sec_stim.onset = sec_onsets;
+            sec_stim.dur   = sec_durs;
+            sec_stim.amp   = ones(size(sec_onsets));
+            Hb(i).stimulus('site_second_destination') = sec_stim;
+        end
+    end
+end
+fprintf('Stimulus arrays updated: First instances preserved, subsequent occurrences routed to nuisance regressors.\n');
 
 %% Section B
 
@@ -140,13 +239,15 @@ event_conditions = { ...
 
 % Matched Baselines, Fixations & Nuisance Windows -> Canonical HRF
 baseline_conditions = { ...
-    'fixation_baseline_start', ... % Fixation
-    'fixation_baseline_end', ... % Fixation
-    'planning_baseline', ... % Planning
-    'null_block', ... % Execution
-    'null_event', ... % Execution
-    'null_event_prespam', ... % Execution
-    % 'debrief' ... % EXCLUDED
+    'fixation_baseline_start', ...
+    'fixation_baseline_end', ...
+    'planning_baseline', ...
+    'null_block', ...
+    'null_event', ...
+    'null_event_prespam', ... % 'debrief' ... % EXCLUDED
+    'status_check_subsequent', ...      % Nuisance
+    'tricorder_switch_subsequent', ...   % Nuisance
+    'site_second_destination' ...        % Nuisance
 };
 
 % Since we are no longer using the 'execution' and 'debrief' blocks, also
@@ -367,6 +468,12 @@ t_hrf_elapsed = toc(t_hrf_start);
 fprintf('Branch 1 complete: %d SubjStats generated in %.2f minutes (%.1f s/ptp).\n', ...
     length(SubjStats_HRF), t_hrf_elapsed / 60, t_hrf_elapsed / num_ptps);
 
+% Checkpoint Save: Guarantee Branch 1 is never lost
+save_dir = fullfile(derivatives_dir, 'FirstLevel_Results');
+if ~exist(save_dir, 'dir'), mkdir(save_dir); end
+fprintf('Saving intermediate Branch 1 checkpoint...\n');
+save(fullfile(save_dir, 'SubjStats_HRF_checkpoint.mat'), 'SubjStats_HRF', '-v7.3');
+
 %% 6b. Execute Branch 2 (Model Validation / Shape Evaluation: Targeted FIR)
 fprintf('\n--- Running Branch 2: Finite Impulse Response (FIR) GLM ---\n');
 fprintf('Fitting targeted impulse deconvolution across %d participants...\n', num_ptps);
@@ -456,13 +563,32 @@ fprintf('--- Section C Execution Complete ---\n\n');
 % end
 
 
-%% Section D. First-Level Baseline Contrasts & Hypothesis Testing
+%% Section D. First-Level Contrasts & Hypothesis Testing (Task-Matched & Fixation)
 fprintf('\n============================================================\n');
-fprintf('  SECTION D: First-Level Baseline Contrasts (Task vs Baseline)\n');
+fprintf('  SECTION D: Computing First-Level Contrasts (Dual Baseline)\n');
 fprintf('============================================================\n');
 
-% Define the core task conditions of interest to contrast against baseline
-contrast_tasks = { ...
+% -------------------------------------------------------------------------
+% 1. Define Phase-Matched Mapping (Option A - Primary per Method Document)
+% -------------------------------------------------------------------------
+task_matched_pairs = { ...
+    'planning_individual', 'planning_baseline'; ...
+    'planning_team',       'planning_baseline'; ...
+    'enroute_true_site',   'null_block'; ...
+    'enroute_decoy_site',  'null_block'; ...
+    'at_true_site',        'null_block'; ...
+    'at_decoy_site',       'null_block'; ...
+    'spam_pop_up',         'null_event_prespam'; ...
+    'status_check',        'null_event'; ...
+    'tricorder_switch',    'null_event'; ...
+    'certainty_individual','null_event'; ...
+    'certainty_consensus', 'null_event'  ...
+};
+
+% -------------------------------------------------------------------------
+% 2. Define Fixation Contrast Tasks (Option B - Physiological Rest)
+% -------------------------------------------------------------------------
+fixation_tasks = { ...
     'planning_individual', ...
     'planning_team', ...
     'enroute_true_site', ...
@@ -470,85 +596,106 @@ contrast_tasks = { ...
     'at_true_site', ...
     'at_decoy_site', ...
     'spam_pop_up', ...
+    'status_check', ...
     'tricorder_switch', ...
-    'status_check' ...
+    'certainty_individual', ...
+    'certainty_consensus' ...
 };
 
-% Container for all participant contrast stats
-% Structure: Contrasts.(task_name) = array of ChannelStats / SubjStats
+% -------------------------------------------------------------------------
+% 3. Pre-allocate Output Containers
+% -------------------------------------------------------------------------
 Contrasts_HRF = struct();
-for t = 1:length(contrast_tasks)
-    Contrasts_HRF.(contrast_tasks{t}) = repmat(nirs.core.ChannelStats, num_ptps, 1);
+Contrasts_HRF.TaskMatched = struct();
+Contrasts_HRF.Fixation    = struct();
+
+num_ptps = length(SubjStats_HRF);
+
+for p = 1:size(task_matched_pairs, 1)
+    Contrasts_HRF.TaskMatched.(task_matched_pairs{p, 1}) = repmat(nirs.core.ChannelStats, num_ptps, 1);
+end
+for t = 1:length(fixation_tasks)
+    Contrasts_HRF.Fixation.(fixation_tasks{t}) = repmat(nirs.core.ChannelStats, num_ptps, 1);
 end
 
-fprintf('Computing first-level contrasts across %d participants...\n', num_ptps);
+fprintf('Computing dual-baseline contrasts across %d participants...\n', num_ptps);
 t_contrast_start = tic;
 
 for i = 1:num_ptps
     stats_i = SubjStats_HRF(i);
-    cond_names = stats_i.conditions; % Unique condition labels in the GLM fit
+    cond_names = stats_i.conditions;
     
-    % -------------------------------------------------------------
-    % 1. Determine Dynamic Baseline for Participant i
-    % -------------------------------------------------------------
-    % Preference order: fixation_baseline_start > fixation_baseline_end > planning_baseline
-    if any(contains(cond_names, 'fixation_baseline_start'))
-        base_root = 'fixation_baseline_start';
-    elseif any(contains(cond_names, 'fixation_baseline_end'))
-        base_root = 'fixation_baseline_end';
-        fprintf('  [Ptp %02d] Using fallback baseline: fixation_baseline_end\n', i);
-    elseif any(contains(cond_names, 'planning_baseline'))
-        base_root = 'planning_baseline';
-        fprintf('  [Ptp %02d] Using fallback baseline: planning_baseline\n', i);
+    % Determine Resting Fixation Baseline for Participant i (Start > End)
+    if any(strcmpi(cond_names, 'fixation_baseline_start'))
+        fix_base = 'fixation_baseline_start';
+    elseif any(strcmpi(cond_names, 'fixation_baseline_end'))
+        fix_base = 'fixation_baseline_end';
     else
-        warning('Participant %02d has no valid baseline condition. Skipping contrasts.', i);
-        continue;
-    end
-    
-    % Locate the exact baseline canonical label
-    % (Matches either 'base_root' or 'base_root:canonical')
-    base_match = strcmp(cond_names, base_root) | strcmp(cond_names, [base_root ':canonical']);
-    base_idx = find(base_match, 1);
-    
-    if isempty(base_idx)
-        warning('Participant %02d: Baseline canonical regressor not found.', i);
-        continue;
+        fix_base = '';
     end
     
     % -------------------------------------------------------------
-    % 2. Evaluate Each Task Condition vs Selected Baseline
+    % A. Task-Matched Contrasts (Option A)
     % -------------------------------------------------------------
-    for t = 1:length(contrast_tasks)
-        task_root = contrast_tasks{t};
+    for p = 1:size(task_matched_pairs, 1)
+        task_name = task_matched_pairs{p, 1};
+        base_name = task_matched_pairs{p, 2};
         
-        % Locate task canonical regressor (strictly ignoring :derivative)
-        task_match = strcmp(cond_names, task_root) | strcmp(cond_names, [task_root ':canonical']);
-        task_idx = find(task_match, 1);
+        idx_task = find(strcmpi(cond_names, task_name) | strcmpi(cond_names, [task_name ':canonical']), 1);
+        idx_base = find(strcmpi(cond_names, base_name) | strcmpi(cond_names, [base_name ':canonical']), 1);
         
-        if isempty(task_idx)
-            % Event did not occur for this participant (e.g., tricorder_switch)
-            continue;
+        % If participant is missing the specific task baseline, fall back to fixation
+        if isempty(idx_base) && ~isempty(fix_base)
+            idx_base = find(strcmpi(cond_names, fix_base) | strcmpi(cond_names, [fix_base ':canonical']), 1);
+            used_base = fix_base;
+        else
+            used_base = base_name;
         end
         
-        % Construct sparse contrast vector (1 x num_conditions)
-        % +1 for Task Canonical, -1 for Baseline Canonical, 0 for derivatives/nuisance
-        c = zeros(1, length(cond_names));
-        c(task_idx) = 1.0;
-        c(base_idx) = -1.0;
+        if ~isempty(idx_task) && ~isempty(idx_base)
+            c = zeros(1, length(cond_names));
+            c(idx_task) =  1.0;
+            c(idx_base) = -1.0;
+            
+            try
+                c_stats = stats_i.ttest(c);
+                c_stats.description = sprintf('%s - %s', task_name, used_base);
+                Contrasts_HRF.TaskMatched.(task_name)(i) = c_stats;
+            catch ME
+                fprintf('  [Ptp %02d] TaskMatched contrast %s failed: %s\n', i, task_name, ME.message);
+            end
+        end
+    end
+    
+    % -------------------------------------------------------------
+    % B. Fixation Contrasts (Option B)
+    % -------------------------------------------------------------
+    if ~isempty(fix_base)
+        idx_fix = find(strcmpi(cond_names, fix_base) | strcmpi(cond_names, [fix_base ':canonical']), 1);
         
-        % Execute hypothesis test via NIRS-Toolbox SubjStats.ttest()
-        try
-            c_stats = stats_i.ttest(c);
-            c_stats.description = sprintf('%s - %s', task_root, base_root);
-            Contrasts_HRF.(task_root)(i) = c_stats;
-        catch ME
-            fprintf('  [Ptp %02d] Contrast %s failed: %s\n', i, task_root, ME.message);
+        for t = 1:length(fixation_tasks)
+            task_name = fixation_tasks{t};
+            idx_task = find(strcmpi(cond_names, task_name) | strcmpi(cond_names, [task_name ':canonical']), 1);
+            
+            if ~isempty(idx_task) && ~isempty(idx_fix)
+                c_fix = zeros(1, length(cond_names));
+                c_fix(idx_task) =  1.0;
+                c_fix(idx_fix)  = -1.0;
+                
+                try
+                    c_stats = stats_i.ttest(c_fix);
+                    c_stats.description = sprintf('%s - %s', task_name, fix_base);
+                    Contrasts_HRF.Fixation.(task_name)(i) = c_stats;
+                catch ME
+                    fprintf('  [Ptp %02d] Fixation contrast %s failed: %s\n', i, task_name, ME.message);
+                end
+            end
         end
     end
 end
 
 t_contrast_elapsed = toc(t_contrast_start);
-fprintf('\n--- Section D Contrasts Complete in %.2f seconds ---\n', t_contrast_elapsed);
+fprintf('Dual contrasts completed in %.2f seconds!\n', t_contrast_elapsed);
 
 %% Section E. Save Results to Derivatives
 save_dir = fullfile(derivatives_dir, 'FirstLevel_Results');

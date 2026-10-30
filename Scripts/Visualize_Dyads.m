@@ -6,18 +6,27 @@ clear; clc;
 warning('off', 'MATLAB:dispatcher:nameConflict');
 
 %% 1. Ensure Dependencies & Paths
-% Laptop
-addpath(genpath('C:\Users\Jalynn\Documents\GitHub\nirs-toolbox'));
-addpath('C:\Users\Jalynn\Documents\GitHub\spm12');
-addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1');
+
+addpath(genpath('D:\GitHub\nirs-toolbox')) % PC
+% addpath(genpath('C:\Users\Jalynn\Documents\GitHub\nirs-toolbox')); % Laptop
+
+addpath('D:\GitHub\spm12') % PC
+% addpath('C:\Users\Jalynn\Documents\GitHub\spm12'); % Laptop
+
+addpath('D:\GitHub\NIRS_SPM_v4_r1') % PC
+% addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1'); % Laptop
 
 %% 2. Load Dataset & Events Table
-Directory = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\fNIRS';
+Directory = 'D:\GitHub\Mars_fNIRS\Data\fNIRS'; % PC
+% Directory = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\fNIRS'; % Laptop
+
 raw = nirs.io.loadDirectory(Directory, {'Subject'});
-event_csv_path = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV3.csv';
+event_csv_path = 'D:\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV3.csv'; % PC
+% event_csv_path = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV3.csv'; % Laptop
 event_table = readtable(event_csv_path);
 
-output_qc_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Output\Dyad_Plots';
+output_qc_dir = 'D:\GitHub\Mars_fNIRS\Output\Dyad_Plots'; % PC
+% output_qc_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Output\Dyad_Plots'; % Laptop
 if ~exist(output_qc_dir, 'dir')
     mkdir(output_qc_dir);
 end
