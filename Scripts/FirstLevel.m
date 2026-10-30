@@ -152,24 +152,78 @@ fprintf('Branch 1 (HRF): Canonical HRF assigned to blocks/baselines; Canonical+D
 
 %% 3b. Branch 2: FIR
 
+% job_fir = nirs.modules.GLM();
+% job_fir.name = 'FIR GLM';
+% job_fir.type = 'AR-IRLS';
+% 
+% % A little more effort goes into create fir basis
+% fir_obj = nirs.design.basis.FIR();
+% 
+% % Design decisions based on paper Section 3.2.4
+% % https://pmc.ncbi.nlm.nih.gov/articles/PMC11218834/
+% fir_obj.nbins = 23; % mean duration + 12 to 18
+% fir_obj.binwidth = 1.0; % To match Fs
+% fir_obj.isIRF = true; % the events are not identical lengths
+% 
+% % Dictionary mapping
+% fir_dict = Dictionary();
+% fir_dict('default') = nirs.design.basis.Canonical();
+% 
+% % Restrict 23-bin FIR deconvolution ONLY to transient impulse events - help
+% % reduce ranking issues
+% transient_events = {'spam_pop_up', 'null_event_prespam', 'tricorder_switch', 'certainty_individual'};
+% for k = 1:length(transient_events)
+%     fir_dict(transient_events{k}) = fir_obj;
+% end
+% 
+% job_fir.basis = fir_dict;
+% 
+% fprintf('Branch 2 (FIR): Configured 23-bin FIR deconvolution ([-2s to +20s] at 1.0 Hz).\n');
+% 
+% fprintf('--- Section B Setup Complete ---\n\n');
+
+%% 3b. Branch 2: Finite Impulse Response (FIR) Setup
+fprintf('\n--- Configuring Branch 2: Finite Impulse Response (FIR) ---\n');
+
 job_fir = nirs.modules.GLM();
 job_fir.name = 'FIR GLM';
 job_fir.type = 'AR-IRLS';
 
-% A little more effort goes into create fir basis
-fir_basis = nirs.design.basis.FIR();
+% 1. Instantiate the FIR basis object for impulse deconvolution
+fir_obj = nirs.design.basis.FIR();
+fir_obj.nbins = 23;        % 23 1-second bins ([0 to 22s] post-stimulus window)
+fir_obj.binwidth = 1.0;    % Matches 1.0 Hz sampling rate (Fs = 1.0 Hz)
+fir_obj.isIRF = true;      % Impulse response formulation for transient events
 
-% Design decisions based on paper Section 3.2.4
-% https://pmc.ncbi.nlm.nih.gov/articles/PMC11218834/
-fir_basis.nbins = 23; % mean duration + 12 to 18
-fir_basis.binwidth = 1.0; % To match Fs
-fir_basis.isIRF = true; % the events are not identical lengths
+% 2. Harvest all unique stimulus keys across the entire cohort safely
+all_stim_keys = {};
+for i = 1:length(Hb)
+    k_i = Hb(i).stimulus.keys;
+    all_stim_keys = [all_stim_keys; k_i(:)];
+end
+all_stim_keys = unique(all_stim_keys);
 
-job_fir.basis('default') = fir_basis;
+% 3. Construct the Basis Dictionary
+canonical_obj = nirs.design.basis.Canonical();
+fir_dict = Dictionary();
 
-fprintf('Branch 2 (FIR): Configured 23-bin FIR deconvolution ([-2s to +20s] at 1.0 Hz).\n');
+% Set internal default and default all conditions to Canonical
+fir_dict('default') = canonical_obj;
+for i = 1:length(all_stim_keys)
+    fir_dict(all_stim_keys{i}) = canonical_obj;
+end
 
-fprintf('--- Section B Setup Complete ---\n\n');
+% Override ONLY the primary impulse validation events with 23-bin FIR
+primary_fir_events = {'spam_pop_up', 'null_event_prespam'};
+for k = 1:length(primary_fir_events)
+    if ismember(primary_fir_events{k}, all_stim_keys)
+        fir_dict(primary_fir_events{k}) = fir_obj;
+        fprintf('  FIR active on condition: %s (23 bins)\n', primary_fir_events{k});
+    end
+end
+
+job_fir.basis = fir_dict;
+fprintf('Branch 2 (FIR): Configured targeted FIR on primary impulse events with Canonical blocks.\n');
 
 %% 4. Experimental Design Matrix Architecture
 
@@ -219,11 +273,73 @@ fprintf('--- Section B Setup Complete (Steps 3, 4, and 5) ---\n\n');
 
 
 
-%% Pre-GLM Correction: Resolve Temporal Collinearity for Near-Concurrent Events
+% %% Pre-GLM Correction: Resolve Temporal Collinearity for Near-Concurrent Events
+% % At Fs = 1.0 Hz, events within <1.0s collapse into the same discrete time bin.
+% % When convolved with identical canonical basis + temporal derivatives,
+% % the resulting columns become collinear (r = 1.0), causing checkRank failure.
+% % Apply a minimal +1.0s jitter to tricorder_switch when colliding with spam_pop_up.
+% 
+% fprintf('\n--- Evaluating Event Timing Separation Across Cohort ---\n');
+% for i = 1:length(Hb)
+%     st = Hb(i).stimulus;
+%     if st.iskey('spam_pop_up') && st.iskey('tricorder_switch')
+%         s_on = st('spam_pop_up').onset;
+%         t_on = st('tricorder_switch').onset;
+% 
+%         if ~isempty(s_on) && ~isempty(t_on)
+%             dt_matrix = abs(s_on(:) - t_on(:)');
+%             min_dt = min(dt_matrix(:));
+% 
+%             if min_dt < 1.0
+%                 fprintf('  Adjusting Participant %02d: min temporal delta = %.2fs (<1.0s threshold).\n', i, min_dt);
+%                 tri_stim = st('tricorder_switch');
+%                 tri_stim.onset = tri_stim.onset + 1.0;
+%                 Hb(i).stimulus('tricorder_switch') = tri_stim;
+%                 fprintf('  -> Shifted tricorder_switch by +1.0s to resolve discrete bin collision.\n');
+%             end
+%         end
+%     end
+% end
+% 
+% %% 6a. Execute Branch 1 (Primary Model: Mixed Block/Event HRF)
+% fprintf('\n--- Running Branch 1: Mixed Block/Event Canonical HRF GLM ---\n');
+% fprintf('Fitting %d participants with AR-IRLS...\n', num_ptps);
+% t_hrf_start = tic;
+% 
+% SubjStats_HRF = job_hrf.run(Hb);
+% 
+% t_hrf_elapsed = toc(t_hrf_start);
+% fprintf('Branch 1 complete: %d SubjStats generated in %.2f minutes (%.1f s/ptp).\n', ...
+%     length(SubjStats_HRF), t_hrf_elapsed / 60, t_hrf_elapsed / num_ptps);
+% 
+% %% 6b. Execute Branch 2 (Model Validation / Shape Evaluation: FIR)
+% fprintf('\n--- Running Branch 2: Finite Impulse Response (FIR) GLM ---\n');
+% fprintf('Fitting 23-bin impulse deconvolution across %d participants...\n', num_ptps);
+% t_fir_start = tic;
+% 
+% SubjStats_FIR = job_fir.run(Hb);
+% 
+% t_fir_elapsed = toc(t_fir_start);
+% fprintf('Branch 2 complete: %d SubjStats generated in %.2f minutes (%.1f s/ptp).\n', ...
+%     length(SubjStats_FIR), t_fir_elapsed / 60, t_fir_elapsed / num_ptps);
+% 
+% %% 6c. Section C Sanity Verification
+% fprintf('\n--- Section C Verification Check ---\n');
+% fprintf('SubjStats_HRF array size: [%s]\n', num2str(size(SubjStats_HRF)));
+% fprintf('SubjStats_FIR array size: [%s]\n', num2str(size(SubjStats_FIR)));
+% fprintf('HRF variables on SubjStats(1): %d beta rows estimated.\n', height(SubjStats_HRF(1).table));
+% fprintf('--- Section C Execution Complete ---\n\n');
+
+%% Section C. First-Level Statistical Estimation (AR-IRLS)
+fprintf('\n============================================================\n');
+fprintf('  SECTION C: First-Level Statistical Estimation (AR-IRLS)\n');
+fprintf('============================================================\n');
+
+%% Pre-GLM Correction: Resolve Temporal Collinearity for Sub-Second Collisions
 % At Fs = 1.0 Hz, events within <1.0s collapse into the same discrete time bin.
-% When convolved with identical canonical basis + temporal derivatives,
-% the resulting columns become collinear (r = 1.0), causing checkRank failure.
-% Apply a minimal +1.0s jitter to tricorder_switch when colliding with spam_pop_up.
+% If tricorder_switch and spam_pop_up occur concurrently, convolving them produces
+% identical regressor columns (r = 1.0), triggering a checkRank failure.
+% Apply a minimal +1.0s jitter to tricorder_switch when a collision (<1.0s) occurs.
 
 fprintf('\n--- Evaluating Event Timing Separation Across Cohort ---\n');
 for i = 1:length(Hb)
@@ -237,17 +353,32 @@ for i = 1:length(Hb)
             min_dt = min(dt_matrix(:));
             
             if min_dt < 1.0
-                fprintf('  Adjusting Participant %02d: min temporal delta = %.2fs (<1.0s threshold).\n', i, min_dt);
+                fprintf('  Adjusting Participant %02d: min delta = %.2fs (<1.0s threshold).\n', i, min_dt);
                 tri_stim = st('tricorder_switch');
                 tri_stim.onset = tri_stim.onset + 1.0;
                 Hb(i).stimulus('tricorder_switch') = tri_stim;
-                fprintf('  -> Shifted tricorder_switch by +1.0s to resolve discrete bin collision.\n');
+                fprintf('  -> Shifted tricorder_switch by +1.0s to break discrete bin collision.\n');
             end
         end
     end
 end
 
-%% 6a. Execute Branch 1 (Primary Model: Mixed Block/Event HRF)
+% Ensure solver is set
+job_hrf.type = 'AR-IRLS';
+job_fir.type = 'AR-IRLS';
+
+num_ptps = length(Hb);
+
+% Initialize Parallel Pool if available on the machine
+if isempty(gcp('nocreate'))
+    try
+        parpool('Processes');
+    catch
+        fprintf('Running on single process (no parallel pool available).\n');
+    end
+end
+
+%% 6a. Execute Branch 1 (Primary Model: Mixed Block/Event Canonical HRF)
 fprintf('\n--- Running Branch 1: Mixed Block/Event Canonical HRF GLM ---\n');
 fprintf('Fitting %d participants with AR-IRLS...\n', num_ptps);
 t_hrf_start = tic;
@@ -258,9 +389,9 @@ t_hrf_elapsed = toc(t_hrf_start);
 fprintf('Branch 1 complete: %d SubjStats generated in %.2f minutes (%.1f s/ptp).\n', ...
     length(SubjStats_HRF), t_hrf_elapsed / 60, t_hrf_elapsed / num_ptps);
 
-%% 6b. Execute Branch 2 (Model Validation / Shape Evaluation: FIR)
+%% 6b. Execute Branch 2 (Model Validation / Shape Evaluation: Targeted FIR)
 fprintf('\n--- Running Branch 2: Finite Impulse Response (FIR) GLM ---\n');
-fprintf('Fitting 23-bin impulse deconvolution across %d participants...\n', num_ptps);
+fprintf('Fitting targeted impulse deconvolution across %d participants...\n', num_ptps);
 t_fir_start = tic;
 
 SubjStats_FIR = job_fir.run(Hb);
@@ -269,12 +400,16 @@ t_fir_elapsed = toc(t_fir_start);
 fprintf('Branch 2 complete: %d SubjStats generated in %.2f minutes (%.1f s/ptp).\n', ...
     length(SubjStats_FIR), t_fir_elapsed / 60, t_fir_elapsed / num_ptps);
 
-%% 6c. Section C Sanity Verification
+%% 6c. Section C Verification & Save Check
 fprintf('\n--- Section C Verification Check ---\n');
 fprintf('SubjStats_HRF array size: [%s]\n', num2str(size(SubjStats_HRF)));
 fprintf('SubjStats_FIR array size: [%s]\n', num2str(size(SubjStats_FIR)));
 fprintf('HRF variables on SubjStats(1): %d beta rows estimated.\n', height(SubjStats_HRF(1).table));
+fprintf('FIR variables on SubjStats(1): %d beta rows estimated.\n', height(SubjStats_FIR(1).table));
 fprintf('--- Section C Execution Complete ---\n\n');
+
+
+
 
 
 
