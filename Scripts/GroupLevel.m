@@ -1,5 +1,12 @@
 % GroupLevel.m
 % Jalynn Nicoly September 29th, 2026
+% This is script 3/4 with a focus on linear mixed-effects models
+% Input: FirstLevel_Cohort_Stats.mat
+% Output: Group-level statistical models; ROI summaries; FDR-correct
+% hypothesis table
+
+
+
 % This is script 3/4 for general linear-mixed effects model
 % GLM analysis across participants - goal is looking at performance
 % Moderator performance too; fdr correction; j.job / j.formula here; Hbo
@@ -71,3 +78,148 @@
 % Random intercept for dyad ((1 | session_id)) across all models
 % 
 % Random intercept for participant nested within dyad ((1 | session_id/bids_id)) for RQ3
+
+
+
+
+
+
+
+
+
+
+
+Section A
+
+Step 1. Environment setup, paths, and ingestion
+
+- initialize the environment with clear and warnings removed
+- include the matlab paths
+
+Step 2. Load .mat file from FirstLevel
+
+- Load .mat file
+- Verify participant qualities
+- verify ptp demographics are still attached to raw_cleaned and Hb
+
+
+
+
+Section B
+
+Spatial registeration, channel filtering, and ROI definition
+
+Step 3. Defining ROIs
+
+- Identify and isolate 41 long channels
+- Exclude the 8 short separation channels
+- Define the four ROI components
+- map the specific optode pairs to each roi name
+- Fact check that all channels are properly categorized and none overlap across ROIs
+
+
+
+Section C - Unsure about this section
+
+Step 4. Individual performance metrics computation
+
+- Signed and unsigned certainty
+	* the survey scores
+	* this is already provided - just use demographics csv
+
+Step 5. Predictor centering and coding
+
+- Mean-center age? Should say in Method doc
+- dummy code gender 0 and 1 and 2 ? 
+- Dummy code second destination ?
+- mean center execution time ? Should say in Method doc
+- Team performance dummy code?
+
+
+
+Section D
+
+Step 6. Setup two tracks for group-level analysis
+
+- Note firstLevel contrasts were already performed
+- Track 1: Channel Level Long Table construction
+	* Extract channel-wise contrast betas, SEs, t-stats, and p-val for long channels
+	* Separate tables for HbO and HbR
+	* Merge with ptp demo, dyad pair ids, and performance metrics
+- Track 2: ROI Averaged Table construction
+	* Contrast estimates were additionally averaged across channels within an ROI
+	* Is said in methods with ROIs
+	* Label timescale per condition
+		* sustained t = 0; transient t = 1
+
+
+
+Section E
+
+Step 7. LME Models
+
+- Method doc mentions ROI contrasts test against zero using intercept-only LME with random intercept
+- Use formula model from Method doc
+- Run this model for both ROI-averaged and individual channels tracks across all task contrasts
+- FIR impulse shape validation
+	* "inspect curves to confirm canonical hemodynamic peaking without anticipation"
+
+
+
+Section F
+
+Step 8. Team performance RQ1
+
+- RQ1 how do sustained and transients differ based on team decision
+- mention formula equation
+- Primary tests difference between correct and decoy
+- Run across:
+	* Track 1 ROI
+	* Track 2 Individual channels
+
+
+
+Section G
+
+Step 9. Individual performance RQ2
+
+- RQ2 how do sustained and transients differ based on individual performance
+- mention formula equation
+- Primary test difference between correct and decoy
+- Run across:
+	* Track 1 ROI
+	* Track 2 Individual channels
+
+
+
+Section H
+
+Step 10. Cross Timescale RQ3
+
+- RQ3 difference across timescales and levels (team and individual)
+- Z-score contrasts betas across ptps 
+- Dataset stacking
+	* sustained with t = 0 and transient t = 1
+- Stack models with nested random effects
+- Parameter extraction:
+	* Sustained slope = b2
+	* Transient slope = b2 + b3
+	* Divergence test = b3 interaction term (95% CI)
+
+
+
+Section I
+
+Step 11. FDR Correction and Export
+
+- Apply FDR correction across ROIs and contrasts
+- Apply FDR correction across individual channels
+- Save master results table and model objects to a new folder
+  * GroupLevel_Models.mat
+  * Table_Validation_ManipulationChecks.csv
+  * Table_RQ1_TeamPerformance_ROI.csv
+  * Table_RQ1_TeamPerformance_Channels.csv
+  * Table_RQ2_IndividualPerformance_ROI.csv
+  * Table_RQ2_IndividualPerformance_Channels.csv
+  * Table_RQ2_AIC_Heading_Comparison.csv
+  * Table_RQ3_CrossTimescale_Stacked.csv
