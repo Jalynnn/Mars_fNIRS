@@ -71,7 +71,7 @@ fprintf('Successfully loaded %d participant recordings.\n', num_ptps);
 % Command window update
 fprintf('\n--- Pruning Unwanted Conditions Across Cohort ---\n');
 
-% Confirm with Cara
+% Confirm with Cara --> confirmed
 % My understanding is we removed both execution and debrief
 conditions_to_prune = {'execution', 'debrief'};
 
@@ -581,8 +581,8 @@ task_matched_pairs = { ...
     'spam_pop_up',         'null_event_prespam'; ...
     'status_check',        'null_event'; ...
     'tricorder_switch',    'null_event'; ...
-    'certainty_individual','null_event'; ...
-    'certainty_consensus', 'null_event'  ...
+    'certainty_individual','planning_baseline'; ...
+    'certainty_consensus', 'planning_baseline'  ...
 };
 
 % -------------------------------------------------------------------------
@@ -625,13 +625,30 @@ for i = 1:num_ptps
     stats_i = SubjStats_HRF(i);
     cond_names = stats_i.conditions;
     
-    % Determine Resting Fixation Baseline for Participant i (Start > End)
-    if any(strcmpi(cond_names, 'fixation_baseline_start'))
-        fix_base = 'fixation_baseline_start';
-    elseif any(strcmpi(cond_names, 'fixation_baseline_end'))
-        fix_base = 'fixation_baseline_end';
+    % -------------------------------------------------------------
+    % Detect available fixation baselines for Participant i
+    % -------------------------------------------------------------
+    idx_fix_start = find(strcmpi(cond_names, 'fixation_baseline_start') | ...
+                         strcmpi(cond_names, 'fixation_baseline_start:canonical'), 1);
+    idx_fix_end   = find(strcmpi(cond_names, 'fixation_baseline_end') | ...
+                         strcmpi(cond_names, 'fixation_baseline_end:canonical'), 1);
+    
+    has_start = ~isempty(idx_fix_start);
+    has_end   = ~isempty(idx_fix_end);
+    
+    % Pre-compute fixation weights [col_index, weight] and label for logging
+    if has_start && has_end
+        fix_weights = [idx_fix_start, -0.5; idx_fix_end, -0.5];
+        fix_desc = 'mean(fix_start, fix_end)';
+    elseif has_start
+        fix_weights = [idx_fix_start, -1.0];
+        fix_desc = 'fixation_baseline_start';
+    elseif has_end
+        fix_weights = [idx_fix_end, -1.0];
+        fix_desc = 'fixation_baseline_end';
     else
-        fix_base = '';
+        fix_weights = [];
+        fix_desc = '';
     end
     
     % -------------------------------------------------------------
@@ -644,22 +661,27 @@ for i = 1:num_ptps
         idx_task = find(strcmpi(cond_names, task_name) | strcmpi(cond_names, [task_name ':canonical']), 1);
         idx_base = find(strcmpi(cond_names, base_name) | strcmpi(cond_names, [base_name ':canonical']), 1);
         
-        % If participant is missing the specific task baseline, fall back to fixation
-        if isempty(idx_base) && ~isempty(fix_base)
-            idx_base = find(strcmpi(cond_names, fix_base) | strcmpi(cond_names, [fix_base ':canonical']), 1);
-            used_base = fix_base;
-        else
-            used_base = base_name;
-        end
-        
-        if ~isempty(idx_task) && ~isempty(idx_base)
+        if ~isempty(idx_task)
             c = zeros(1, length(cond_names));
-            c(idx_task) =  1.0;
-            c(idx_base) = -1.0;
+            c(idx_task) = 1.0;
+            
+            % If participant has the task-matched baseline, use it (-1.0)
+            if ~isempty(idx_base)
+                c(idx_base) = -1.0;
+                desc_str = sprintf('%s - %s', task_name, base_name);
+            % Fallback to fixation baseline (averaged or single) if task baseline is missing
+            elseif ~isempty(fix_weights)
+                for w = 1:size(fix_weights, 1)
+                    c(fix_weights(w, 1)) = fix_weights(w, 2);
+                end
+                desc_str = sprintf('%s - %s', task_name, fix_desc);
+            else
+                continue; % No baseline available
+            end
             
             try
                 c_stats = stats_i.ttest(c);
-                c_stats.description = sprintf('%s - %s', task_name, used_base);
+                c_stats.description = desc_str;
                 Contrasts_HRF.TaskMatched.(task_name)(i) = c_stats;
             catch ME
                 fprintf('  [Ptp %02d] TaskMatched contrast %s failed: %s\n', i, task_name, ME.message);
@@ -668,29 +690,33 @@ for i = 1:num_ptps
     end
     
     % -------------------------------------------------------------
-    % B. Fixation Contrasts (Option B)
+    % B. Fixation Contrasts (Option B - Physiological Rest)
     % -------------------------------------------------------------
-    if ~isempty(fix_base)
-        idx_fix = find(strcmpi(cond_names, fix_base) | strcmpi(cond_names, [fix_base ':canonical']), 1);
-        
+    if ~isempty(fix_weights)
         for t = 1:length(fixation_tasks)
             task_name = fixation_tasks{t};
             idx_task = find(strcmpi(cond_names, task_name) | strcmpi(cond_names, [task_name ':canonical']), 1);
             
-            if ~isempty(idx_task) && ~isempty(idx_fix)
+            if ~isempty(idx_task)
                 c_fix = zeros(1, length(cond_names));
-                c_fix(idx_task) =  1.0;
-                c_fix(idx_fix)  = -1.0;
+                c_fix(idx_task) = 1.0;
+                
+                % Apply fixation baseline weight(s)
+                for w = 1:size(fix_weights, 1)
+                    c_fix(fix_weights(w, 1)) = fix_weights(w, 2);
+                end
                 
                 try
                     c_stats = stats_i.ttest(c_fix);
-                    c_stats.description = sprintf('%s - %s', task_name, fix_base);
+                    c_stats.description = sprintf('%s - %s', task_name, fix_desc);
                     Contrasts_HRF.Fixation.(task_name)(i) = c_stats;
                 catch ME
                     fprintf('  [Ptp %02d] Fixation contrast %s failed: %s\n', i, task_name, ME.message);
                 end
             end
         end
+    else
+        fprintf('  [Ptp %02d] Missing both fixation periods. Skipping Option B.\n', i);
     end
 end
 

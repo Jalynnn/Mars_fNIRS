@@ -17,7 +17,8 @@ addpath('D:\GitHub\NIRS_SPM_v4_r1') % PC
 % addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1'); % Laptop
 
 %% 2. Load Dataset & Events Table
-Directory = 'D:\GitHub\Mars_fNIRS\Data\fNIRS'; % PC
+Directory = 'D:\GitHu
+b\Mars_fNIRS\Data\fNIRS'; % PC
 % Directory = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\fNIRS'; % Laptop
 
 raw = nirs.io.loadDirectory(Directory, {'Subject'});
@@ -133,10 +134,10 @@ for d = 1:num_dyads
     idx_p2 = [];
     for i = 1:length(raw)
         subj_name = raw(i).demographics('Subject');
-        if strcmp(subj_name, p1_folder) || startsWith(p1_folder, subj_name)
+        if strcmp(subj_name, p1_folder) % || startsWith(p1_folder, subj_name)
             idx_p1 = i;
         end
-        if strcmp(subj_name, p2_folder) || startsWith(p2_folder, subj_name)
+        if strcmp(subj_name, p2_folder) % || startsWith(p2_folder, subj_name)
             idx_p2 = i;
         end
     end

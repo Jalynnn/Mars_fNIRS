@@ -103,7 +103,7 @@ end
 [~, sort_order] = sort(ptp_num);
 raw = raw(sort_order);
 
-% Confirm fix in command window
+% Confirm fix in command window --> confirmed
 % fprintf('Raw(1) is now: %s\n', raw(1).demographics('Subject'));
 
 % Command Window Update
@@ -190,7 +190,7 @@ for i = 1:length(raw)
     % Save only the events for this subj
     subj_events = event_table(strcmp(event_table.fnirs_folder, subj_id), :);
 
-    % Confirm there are events
+    % Confirm there are events - yay easy confirm
     % if empty end, else continue
     if isempty(subj_events), continue; end
 
@@ -487,7 +487,7 @@ for i = 1:length(raw)
             durs = st.dur;
 
             % Case A: All occurrences have identical duration
-            if length(durs) == 1
+            if isscalar(durs)
                 durs = repmat(durs, n_pts, 1);
             % Case B: Empty so duration is 0
             elseif isempty(durs)
