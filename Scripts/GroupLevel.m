@@ -81,10 +81,6 @@ ssc_pairs = [
     15, 13
 ];
 
-% Define the four ROI components
-% "rostral prefrontal cortex (RPFC; BA 10), left and right dorsolateral
-% prefrontal cortex (DLPFC; BA 9/46), and parietal cortex (BA 7/40)."
-
 % Recall ptps already have their digitization pairs
 % We can extract the channel midpoints and classify channels into the 4
 % ROIs based on their MNI space coordinates
@@ -160,14 +156,14 @@ end
 load(mni_avg_file, 'MNIs_Mean'); % 41 x 3 cortical coordinates
 fprintf('Loaded pre-computed group cortical MNI coordinates for %d channels.\n', size(MNIs_Mean, 1));
 
-%% 3. Assign 4 Functional ROIs Based on MNI Coordinates & Brodmann Areas
+%% 3. Assign 5 Functional ROIs Based on MNI Coordinates & Brodmann Areas
 % Text Specification:
 % - RPFC (BA 10): Rostral Prefrontal Cortex (medial frontopolar: Y >= 68 mm, Z <= 21 mm)
-% - L_DLPFC (BA 9/46): Left Dorsolateral Prefrontal Cortex (X < 0)
-% - R_DLPFC (BA 9/46): Right Dorsolateral Prefrontal Cortex (X > 0)
-% - Parietal (BA 7/40): Parietal Cortex (bilateral, combining Left & Right: Y <= 50 mm)
+% - L_DLPFC (BA 9/46): Left Dorsolateral Prefrontal Cortex (Y > 50 mm, X < 0)
+% - R_DLPFC (BA 9/46): Right Dorsolateral Prefrontal Cortex (Y > 50 mm, X > 0)
+% - L_Parietal (BA 7/40): Left Posterior Parietal Cortex (Y <= 50 mm, X < 0)
+% - R_Parietal (BA 7/40): Right Posterior Parietal Cortex (Y <= 50 mm, X > 0)
 roi_assignments = cell(num_channels, 1);
-
 for c = 1:num_channels
     x_coord = MNIs_Mean(c, 1);
     y_coord = MNIs_Mean(c, 2);
@@ -184,7 +180,11 @@ for c = 1:num_channels
             end
         end
     else             % Parietal Montage (Channels 20-41, BA 7/40)
-        roi_assignments{c} = 'Parietal';      % Combined Bilateral Parietal
+        if x_coord < 0
+            roi_assignments{c} = 'L_Parietal';   % Left BA 7/40 (Channels 20-29)
+        else
+            roi_assignments{c} = 'R_Parietal';   % Right BA 7/40 (Channels 30-41)
+        end
     end
 end
 
@@ -204,15 +204,15 @@ if any(is_ssc_leak)
     error('Short-separation channel detected inside the cortical table!');
 end
 
-% Verify all 4 method-specified ROIs are populated without empty groups
-roi_names = {'RPFC', 'L_DLPFC', 'R_DLPFC', 'Parietal'};
-fprintf('Assigned Channels across Method-Specified ROIs:\n');
+% Verify all 5 method-specified ROIs are populated without empty groups
+roi_names = {'RPFC', 'L_DLPFC', 'R_DLPFC', 'L_Parietal', 'R_Parietal'};
+fprintf('Assigned Channels across Method-Specified ROIs (5 ROIs):\n');
 for r = 1:length(roi_names)
-    count = sum(strcmp(Master_Atlas_Table.ROI, roi_names{r}));
+    count = sum(strcmp(string(Master_Atlas_Table.ROI), roi_names{r}));
     if count == 0
         warning('ROI %s has 0 channels assigned!', roi_names{r});
     else
-        fprintf('  - %-8s: %2d channels\n', roi_names{r}, count);
+        fprintf('  - %-10s: %2d channels\n', roi_names{r}, count);
     end
 end
 
@@ -1233,8 +1233,12 @@ for row = 1:n_chan_models
             chan_ba_label(row) = "BA 9/46 – Left Dorsolateral Prefrontal Cortex";
         case "R_DLPFC"
             chan_ba_label(row) = "BA 9/46 – Right Dorsolateral Prefrontal Cortex";
-        case "Parietal"
-            chan_ba_label(row) = "BA 7/40 – Posterior Parietal Cortex";
+        % case "Parietal"
+        %     chan_ba_label(row) = "BA 7/40 – Posterior Parietal Cortex";
+        case "L_Parietal"
+            chan_ba_label(row) = "BA 7/40 – Left Posterior Parietal Cortex";
+        case "R_Parietal"
+            chan_ba_label(row) = "BA 7/40 – Right Posterior Parietal Cortex";
         otherwise
             chan_ba_label(row) = ch_roi;
     end
@@ -1387,8 +1391,12 @@ for row = 1:n_roi_models
             roi_ba_label(row) = "BA 9/46 – Left Dorsolateral Prefrontal Cortex";
         case "R_DLPFC"
             roi_ba_label(row) = "BA 9/46 – Right Dorsolateral Prefrontal Cortex";
-        case "Parietal"
-            roi_ba_label(row) = "BA 7/40 – Posterior Parietal Cortex";
+        % case "Parietal"
+        %     roi_ba_label(row) = "BA 7/40 – Posterior Parietal Cortex";
+        case "L_Parietal"
+            roi_ba_label(row) = "BA 7/40 – Left Posterior Parietal Cortex";
+        case "R_Parietal"
+            roi_ba_label(row) = "BA 7/40 – Right Posterior Parietal Cortex";
         otherwise
             roi_ba_label(row) = string(s_roi);
     end
@@ -1842,7 +1850,9 @@ for row = 1:n_ch_m
         case "RPFC",    ch_ba(row) = "BA 10 – Rostral Prefrontal Cortex";
         case "L_DLPFC", ch_ba(row) = "BA 9/46 – Left Dorsolateral Prefrontal Cortex";
         case "R_DLPFC", ch_ba(row) = "BA 9/46 – Right Dorsolateral Prefrontal Cortex";
-        case "Parietal",ch_ba(row) = "BA 7/40 – Posterior Parietal Cortex";
+        % case "Parietal",ch_ba(row) = "BA 7/40 – Posterior Parietal Cortex";
+        case "L_Parietal", ch_ba(row) = "BA 7/40 – Left Posterior Parietal Cortex";
+        case "R_Parietal", ch_ba(row) = "BA 7/40 – Right Posterior Parietal Cortex";
         otherwise,      ch_ba(row) = string(Table_RQ2_Channels.ROI(row));
     end
 end
@@ -1906,7 +1916,9 @@ for row = 1:n_roi_m
         case "RPFC",    roi_ba(row) = "BA 10 – Rostral Prefrontal Cortex";
         case "L_DLPFC", roi_ba(row) = "BA 9/46 – Left Dorsolateral Prefrontal Cortex";
         case "R_DLPFC", roi_ba(row) = "BA 9/46 – Right Dorsolateral Prefrontal Cortex";
-        case "Parietal",roi_ba(row) = "BA 7/40 – Posterior Parietal Cortex";
+        % case "Parietal",roi_ba(row) = "BA 7/40 – Posterior Parietal Cortex";
+        case "L_Parietal", roi_ba(row) = "BA 7/40 – Left Posterior Parietal Cortex";
+        case "R_Parietal", roi_ba(row) = "BA 7/40 – Right Posterior Parietal Cortex";
         otherwise,      roi_ba(row) = string(s_roi);
     end
 end

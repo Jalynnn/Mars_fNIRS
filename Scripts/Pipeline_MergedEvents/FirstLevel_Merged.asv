@@ -1,0 +1,775 @@
+% FirstLevel.m
+% Jalynn Nicoly September 29th, 2026
+% This is script 2/4 with a focus on analyzing individuals ptps
+% Input: Output from preprocess.m; raw objects; bad channels from
+% preprocess.m from saved csv
+% Task: Running continuous GLM
+% Output: Array of ChannelStats / SubjStats with Beta and HbO/HbR
+
+%% Section A
+
+% The purpose of this section is to setup MATLAB paths in case Preprocess.m
+% is not run prior to FirstLevel.m
+
+% Command Window Update
+fprintf('--- Starting fNIRS FirstLevel.m ---\n')
+
+% Clear Terminal
+clear, clc
+
+% Silence naming conflict warnings
+warning('off', 'MATLAB:dispatcher:nameConflict');
+
+%% 1. Set MATLAB Paths
+
+% Add NIRS Toolbox to MATLAB Path
+% addpath(genpath('C:\Users\Jalynn\Documents\GitHub\nirs-toolbox')) % Laptop
+addpath(genpath('D:\GitHub\nirs-toolbox')) % PC
+
+% Add NIRS SPM 
+% addpath('C:\Users\Jalynn\Documents\GitHub\spm12') % Laptop
+addpath('D:\GitHub\spm12') % PC
+
+% https://www.nitrc.org/projects/nirs_spm/
+% addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1') % Laptop
+addpath('D:\GitHub\NIRS_SPM_v4_r1') % PC
+
+%% 2. Load Preprocessed Cohort Data & Prune Execution/Debrief
+
+% Command Window Update
+fprintf('\n--- Loading Preprocessed Cohort Data ---\n')
+
+% Preprocess.m saved to Derivatives folder with following file name
+% derivatives_dir = "C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Derivatives"; % Laptop
+% derivatives_dir = 'D:\GitHub\Mars_fNIRS\Data\Derivatives'; % PC
+%% OVERWRITTEN
+derivatives_dir = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents';
+load_file = fullfile(derivatives_dir, "Hb_preprocessed_cohort.mat");
+
+% Error checking if file exists yet
+if ~exist(load_file, 'file')
+    error('Please run Preprocess.m first.');
+end
+
+% Command window update
+fprintf('Loading: %s ...\n', load_file);
+
+% Load preprocessed data and QA table
+loaded_data = load(load_file, 'Hb', 'qa_table');
+
+% Assign columns to variables
+Hb = loaded_data.Hb;
+qa_table = loaded_data.qa_table;
+
+% Collect the length of Hb - The num of ptps
+num_ptps = length(Hb);
+
+% Command window update
+fprintf('Successfully loaded %d participant recordings.\n', num_ptps);
+
+% Verification check ran in command window with export saved in
+% FirstLevelOutput folder
+
+% Command window update
+fprintf('\n--- Pruning Unwanted Conditions Across Cohort ---\n');
+
+% Confirm with Cara --> confirmed
+% My understanding is we removed both execution and debrief
+conditions_to_prune = {'execution', 'debrief'};
+
+% Set default to 0
+total_pruned = 0;
+
+% For each ptp / recall saved in Hb instead of raw_clean
+for i = 1:length(Hb)
+    % Collect key
+    st_keys = Hb(i).stimulus.keys;
+    % for each condition/stimulus found
+    for c = 1:length(conditions_to_prune)
+        % collect the name of current condition
+        cond_name = conditions_to_prune{c};
+        
+        % if it matches pruned conditions...
+        if Hb(i).stimulus.iskey(cond_name)
+            % Remove the condition
+            Hb(i).stimulus = Hb(i).stimulus.remove(cond_name);
+
+            % Increase the count by 1
+            total_pruned = total_pruned + 1;
+        end
+    end
+end
+
+% Command window update
+fprintf('Successfully pruned %d condition instances across %d participants.\n', ...
+    total_pruned, length(Hb));
+
+%% AI added for limiting events to only their first instance
+
+%% 2b. Restrict Key Tasks to First Instance & Separate Subsequent Visits/Reports
+fprintf('\n--- Restricting Analysis to First Instance & Isolating Subsequent Occurrences ---\n');
+
+for i = 1:length(Hb)
+    st = Hb(i).stimulus;
+    
+    % ---------------------------------------------------------------------
+    % A. First Status Report vs. Subsequent Reports
+    % ---------------------------------------------------------------------
+    if st.iskey('status_check')
+        sc = st('status_check');
+        if length(sc.onset) > 1
+            % Create nuisance object for subsequent check-ins (index 2:end)
+            sc_sub = nirs.design.StimulusEvents();
+            sc_sub.name  = 'status_check_subsequent';
+            sc_sub.onset = sc.onset(2:end);
+            sc_sub.dur   = sc.dur(2:end);
+            sc_sub.amp   = ones(size(sc_sub.onset));
+            Hb(i).stimulus('status_check_subsequent') = sc_sub;
+            
+            % Restrict primary regressor strictly to the first instance
+            sc.onset = sc.onset(1);
+            sc.dur   = sc.dur(1);
+            sc.amp   = 1.0;
+            Hb(i).stimulus('status_check') = sc;
+        end
+    end
+    
+    % ---------------------------------------------------------------------
+    % B. First Detector Switch vs. Subsequent Switches
+    % ---------------------------------------------------------------------
+    if st.iskey('tricorder_switch')
+        ts = st('tricorder_switch');
+        if length(ts.onset) > 1
+            ts_sub = nirs.design.StimulusEvents();
+            ts_sub.name  = 'tricorder_switch_subsequent';
+            ts_sub.onset = ts.onset(2:end);
+            ts_sub.dur   = ts.dur(2:end);
+            ts_sub.amp   = ones(size(ts_sub.onset));
+            Hb(i).stimulus('tricorder_switch_subsequent') = ts_sub;
+            
+            ts.onset = ts.onset(1);
+            ts.dur   = ts.dur(1);
+            ts.amp   = 1.0;
+            Hb(i).stimulus('tricorder_switch') = ts;
+        end
+    end
+    
+    % ---------------------------------------------------------------------
+    % C. First Point of Arrival (True vs Decoy) & En-Route
+    % ---------------------------------------------------------------------
+    has_true  = st.iskey('at_true_site');
+    has_decoy = st.iskey('at_decoy_site');
+    
+    if has_true && has_decoy
+        % Dyad visited BOTH sites: determine which site occurred first in time
+        t_true  = st('at_true_site').onset(1);
+        t_decoy = st('at_decoy_site').onset(1);
+        
+        if t_true < t_decoy
+            % Correct site was visited first! Decoy site is the second destination
+            second_dest_blocks = {'at_decoy_site', 'enroute_decoy_site'};
+        else
+            % Decoy site was visited first! True site is the second destination
+            second_dest_blocks = {'at_true_site', 'enroute_true_site'};
+        end
+        
+        % Pool second destination blocks into a nuisance regressor
+        sec_onsets = [];
+        sec_durs   = [];
+        for b = 1:length(second_dest_blocks)
+            b_name = second_dest_blocks{b};
+            if st.iskey(b_name)
+                b_stim = st(b_name);
+                sec_onsets = [sec_onsets; b_stim.onset(:)];
+                sec_durs   = [sec_durs;   b_stim.dur(:)];
+                Hb(i).stimulus = Hb(i).stimulus.remove(b_name); % Remove from primary task set
+            end
+        end
+        
+        if ~isempty(sec_onsets)
+            [sec_onsets, s_idx] = sort(sec_onsets);
+            sec_durs = sec_durs(s_idx);
+            
+            sec_stim = nirs.design.StimulusEvents();
+            sec_stim.name  = 'site_second_destination';
+            sec_stim.onset = sec_onsets;
+            sec_stim.dur   = sec_durs;
+            sec_stim.amp   = ones(size(sec_onsets));
+            Hb(i).stimulus('site_second_destination') = sec_stim;
+        end
+    end
+
+    %% OVERWRITTEN BUT TECHNICALLY JUST ADDED SECTION D
+    % ---------------------------------------------------------------------
+    % D. Merged Sustained Destination Visits (True vs Decoy)
+    % ---------------------------------------------------------------------
+    has_sust_true  = st.iskey('sustained_true_site');
+    has_sust_decoy = st.iskey('sustained_decoy_site');
+    
+    if has_sust_true && has_sust_decoy
+        t_s_true  = st('sustained_true_site').onset(1);
+        t_s_decoy = st('sustained_decoy_site').onset(1);
+        
+        if t_s_true < t_s_decoy
+            sec_sust_name = 'sustained_decoy_site';
+        else
+            sec_sust_name = 'sustained_true_site';
+        end
+        
+        if st.iskey(sec_sust_name)
+            sec_sust_stim = st(sec_sust_name);
+            Hb(i).stimulus = Hb(i).stimulus.remove(sec_sust_name);
+            
+            % Append to existing site_second_destination regressor
+            if Hb(i).stimulus.iskey('site_second_destination')
+                cur_sec = Hb(i).stimulus('site_second_destination');
+                cur_sec.onset = [cur_sec.onset; sec_sust_stim.onset(:)];
+                cur_sec.dur   = [cur_sec.dur;   sec_sust_stim.dur(:)];
+                cur_sec.amp   = ones(size(cur_sec.onset));
+                Hb(i).stimulus('site_second_destination') = cur_sec;
+            else
+                sec_sust_stim.name = 'site_second_destination';
+                Hb(i).stimulus('site_second_destination') = sec_sust_stim;
+            end
+        end
+    end
+end
+fprintf('Stimulus arrays updated: First instances preserved, subsequent occurrences routed to nuisance regressors.\n');
+
+%% Section B
+
+% The focus of this section is on stimulus basis configuration for
+% individual and team levels along with dual model branching since we are
+% using both HRF and FIR
+
+% Command Window Update
+fprintf('--- Configure Dual-Branch (HRF & FIR) GLM Basis Functions ---\n')
+
+%% 3. Dual Model Framework Definitions
+
+% There are two frameworks we are running with. HRF and FIR
+
+% Start with stimulus classification into blocks vs events vs baselines
+% There were 19 extracted stimulus keys found in FirstLevelOutput
+
+% Sustained Task Blocks -> Convolved with Canonical HRF
+% (Contains the 4 core mission phases + overall execution parent block)
+block_conditions = { ...
+    'planning_individual', ... % Planning
+    'planning_team', ... % Planning
+    'enroute_true_site', ... % Execution
+    'enroute_decoy_site', ... % Execution
+    'at_true_site', ... % Execution
+    'at_decoy_site', ... % Execution
+    % 'execution' ... % EXCLUDED
+    %% OVERWRITTEN BUT AGAIN TECHNICALLY JUST INCLUDED
+    'sustained_true_site', ...  % <--- ADDED EVENT 12
+    'sustained_decoy_site' ...  % <--- ADDED EVENT 13
+};
+
+% Transient Task Events -> Convolved with Canonical HRF + Temporal Derivative
+% (The 5 discrete cognitive events/actions)
+event_conditions = { ...
+    'certainty_individual', ... % Planning
+    'certainty_consensus', ... % Planning
+    'spam_pop_up', ... % Execution
+    'tricorder_switch', ... % Execution
+    'status_check' ... % Execution
+};
+
+% Matched Baselines, Fixations & Nuisance Windows -> Canonical HRF
+baseline_conditions = { ...
+    'fixation_baseline_start', ...
+    'fixation_baseline_end', ...
+    'planning_baseline', ...
+    'null_block', ...
+    'null_event', ...
+    'null_event_prespam', ... % 'debrief' ... % EXCLUDED
+    'status_check_subsequent', ...      % Nuisance
+    'tricorder_switch_subsequent', ...   % Nuisance
+    'site_second_destination' ...        % Nuisance
+};
+
+% Since we are no longer using the 'execution' and 'debrief' blocks, also
+% necessary to remove them from the ptps which is done in step 2
+
+%% 3a. Branch 1: HRF
+
+job_hrf = nirs.modules.GLM();
+job_hrf.name = 'HRF GLM';
+job_hrf.type = 'AR-IRLS';
+
+% Blocks and baselines get default canonical w/o derivative
+job_hrf.basis('default') = nirs.design.basis.Canonical();
+
+% Define canonical w/ temporal derivative for events
+basis_with_deriv = nirs.design.basis.Canonical();
+% Adds derivative
+basis_with_deriv.incDeriv = true;
+% Keep false to drop derivative betas
+basis_with_deriv.keepDerivs = false;
+
+% Assign Canonical + Temporal Derivative to transient events
+% event_conditions refers to the structs above
+for k = 1:length(event_conditions)
+    % for one of the events in that struct
+    c_name = event_conditions{k};
+    
+    % Transients use canonical and temporal derivative
+    job_hrf.basis(c_name) = basis_with_deriv;
+end
+
+% Command window update
+fprintf('Branch 1 (HRF): Canonical HRF assigned to blocks/baselines; Canonical+Deriv assigned to %d events.\n', ...
+    length(event_conditions));
+
+%% 3b. Branch 2: FIR
+
+% job_fir = nirs.modules.GLM();
+% job_fir.name = 'FIR GLM';
+% job_fir.type = 'AR-IRLS';
+% 
+% % A little more effort goes into create fir basis
+% fir_obj = nirs.design.basis.FIR();
+% 
+% % Design decisions based on paper Section 3.2.4
+% % https://pmc.ncbi.nlm.nih.gov/articles/PMC11218834/
+% fir_obj.nbins = 23; % mean duration + 12 to 18
+% fir_obj.binwidth = 1.0; % To match Fs
+% fir_obj.isIRF = true; % the events are not identical lengths
+% 
+% % Dictionary mapping
+% fir_dict = Dictionary();
+% fir_dict('default') = nirs.design.basis.Canonical();
+% 
+% % Restrict 23-bin FIR deconvolution ONLY to transient impulse events - help
+% % reduce ranking issues
+% transient_events = {'spam_pop_up', 'null_event_prespam', 'tricorder_switch', 'certainty_individual'};
+% for k = 1:length(transient_events)
+%     fir_dict(transient_events{k}) = fir_obj;
+% end
+% 
+% job_fir.basis = fir_dict;
+% 
+% fprintf('Branch 2 (FIR): Configured 23-bin FIR deconvolution ([-2s to +20s] at 1.0 Hz).\n');
+% 
+% fprintf('--- Section B Setup Complete ---\n\n');
+
+%% 3b. Branch 2: Finite Impulse Response (FIR) Setup
+fprintf('\n--- Configuring Branch 2: Finite Impulse Response (FIR) ---\n');
+
+job_fir = nirs.modules.GLM();
+job_fir.name = 'FIR GLM';
+job_fir.type = 'AR-IRLS';
+
+% 1. Instantiate the FIR basis object for impulse deconvolution
+fir_obj = nirs.design.basis.FIR();
+fir_obj.nbins = 23;        % 23 1-second bins ([0 to 22s] post-stimulus window)
+fir_obj.binwidth = 1.0;    % Matches 1.0 Hz sampling rate (Fs = 1.0 Hz)
+fir_obj.isIRF = true;      % Impulse response formulation for transient events
+
+% 2. Harvest all unique stimulus keys across the entire cohort safely
+all_stim_keys = {};
+for i = 1:length(Hb)
+    k_i = Hb(i).stimulus.keys;
+    all_stim_keys = [all_stim_keys; k_i(:)];
+end
+all_stim_keys = unique(all_stim_keys);
+
+% 3. Construct the Basis Dictionary
+canonical_obj = nirs.design.basis.Canonical();
+fir_dict = Dictionary();
+
+% Set internal default and default all conditions to Canonical
+fir_dict('default') = canonical_obj;
+for i = 1:length(all_stim_keys)
+    fir_dict(all_stim_keys{i}) = canonical_obj;
+end
+
+% Override ONLY the primary impulse validation events with 23-bin FIR
+primary_fir_events = {'spam_pop_up', 'null_event_prespam'};
+for k = 1:length(primary_fir_events)
+    if ismember(primary_fir_events{k}, all_stim_keys)
+        fir_dict(primary_fir_events{k}) = fir_obj;
+        fprintf('  FIR active on condition: %s (23 bins)\n', primary_fir_events{k});
+    end
+end
+
+job_fir.basis = fir_dict;
+fprintf('Branch 2 (FIR): Configured targeted FIR on primary impulse events with Canonical blocks.\n');
+
+%% 4. Experimental Design Matrix Architecture
+
+% Verifies that all modeled task blocks, events, and baselines are present
+% Checks for condition presence across ptps
+
+all_modeled_conditions = [block_conditions, event_conditions, baseline_conditions];
+fprintf('[Step 4] Configured %d total design matrix regressors:\n', length(all_modeled_conditions));
+fprintf('   - %d Sustained Task Blocks (Canonical HRF)\n', length(block_conditions));
+fprintf('   - %d Transient Events (Canonical HRF + Temporal Derivative)\n', length(event_conditions));
+fprintf('   - %d Matched Baselines, Fixations & Nuisance Windows (Canonical HRF)\n', length(baseline_conditions));
+
+% Optional sanity check: verify design matrix column construction on Hb(1)
+try
+    sample_dm = job_hrf.create_design_matrix(Hb(1));
+    fprintf('   - Hb(1) Design Matrix generated successfully (%d timepoints x %d regressors).\n', ...
+        size(sample_dm, 1), size(sample_dm, 2));
+catch
+    % Handled cleanly if create_design_matrix syntax varies by toolbox release
+    fprintf('   - Design matrix architecture registered in job_hrf/job_fir basis dictionaries.\n');
+end
+
+%% 5. Short-Separation Physiological Nuisance Regression
+
+% Append SSCs as systemic regressors
+% Done by setting the following as true
+% Seeking for distances < 15 mm - confirmed to be only the true 8
+
+job_hrf.AddShortSepRegressors = true;
+job_fir.AddShortSepRegressors = true;
+
+% Verify short-channel detection on first participant
+if ismember('ShortSeperation', Hb(1).probe.link.Properties.VariableNames)
+    n_ssc = sum(Hb(1).probe.link.ShortSeperation);
+else
+    n_ssc = sum(Hb(1).probe.distances < 15);
+end
+
+fprintf('[Step 5] Short-separation physiological nuisance regression enabled on both branches.\n');
+fprintf('   - Detected %d short-separation channels (%d physical optode pairs) in probe geometry.\n', ...
+    n_ssc, n_ssc / 2);
+fprintf('--- Section B Setup Complete (Steps 3, 4, and 5) ---\n\n');
+
+%% Section C
+
+
+
+
+
+
+
+
+%% Section C. First-Level Statistical Estimation (AR-IRLS)
+fprintf('\n============================================================\n');
+fprintf('  SECTION C: First-Level Statistical Estimation (AR-IRLS)\n');
+fprintf('============================================================\n');
+
+%% Pre-GLM Correction: Resolve Temporal Collinearity for Sub-Second Collisions
+% At Fs = 1.0 Hz, events within <1.0s collapse into the same discrete time bin.
+% If tricorder_switch and spam_pop_up occur concurrently, convolving them produces
+% identical regressor columns (r = 1.0), triggering a checkRank failure.
+% Apply a minimal +1.0s jitter to tricorder_switch when a collision (<1.0s) occurs.
+
+fprintf('\n--- Evaluating Event Timing Separation Across Cohort ---\n');
+for i = 1:length(Hb)
+    st = Hb(i).stimulus;
+    if st.iskey('spam_pop_up') && st.iskey('tricorder_switch')
+        s_on = st('spam_pop_up').onset;
+        t_on = st('tricorder_switch').onset;
+        
+        if ~isempty(s_on) && ~isempty(t_on)
+            dt_matrix = abs(s_on(:) - t_on(:)');
+            min_dt = min(dt_matrix(:));
+            
+            if min_dt < 1.0
+                fprintf('  Adjusting Participant %02d: min delta = %.2fs (<1.0s threshold).\n', i, min_dt);
+                tri_stim = st('tricorder_switch');
+                tri_stim.onset = tri_stim.onset + 1.0;
+                Hb(i).stimulus('tricorder_switch') = tri_stim;
+                fprintf('  -> Shifted tricorder_switch by +1.0s to break discrete bin collision.\n');
+            end
+        end
+    end
+end
+
+% Ensure solver is set
+job_hrf.type = 'AR-IRLS';
+job_fir.type = 'AR-IRLS';
+
+num_ptps = length(Hb);
+
+% Initialize Parallel Pool if available on the machine
+if isempty(gcp('nocreate'))
+    try
+        parpool('Processes');
+    catch
+        fprintf('Running on single process (no parallel pool available).\n');
+    end
+end
+
+%% 6a. Execute Branch 1 (Primary Model: Mixed Block/Event Canonical HRF)
+fprintf('\n--- Running Branch 1: Mixed Block/Event Canonical HRF GLM ---\n');
+fprintf('Fitting %d participants with AR-IRLS...\n', num_ptps);
+t_hrf_start = tic;
+
+SubjStats_HRF = job_hrf.run(Hb);
+
+t_hrf_elapsed = toc(t_hrf_start);
+fprintf('Branch 1 complete: %d SubjStats generated in %.2f minutes (%.1f s/ptp).\n', ...
+    length(SubjStats_HRF), t_hrf_elapsed / 60, t_hrf_elapsed / num_ptps);
+
+% Checkpoint Save: Guarantee Branch 1 is never lost
+save_dir = fullfile(derivatives_dir, 'FirstLevel_Results');
+if ~exist(save_dir, 'dir'), mkdir(save_dir); end
+fprintf('Saving intermediate Branch 1 checkpoint...\n');
+save(fullfile(save_dir, 'SubjStats_HRF_checkpoint.mat'), 'SubjStats_HRF', '-v7.3');
+
+%% 6b. Execute Branch 2 (Model Validation / Shape Evaluation: Targeted FIR)
+fprintf('\n--- Running Branch 2: Finite Impulse Response (FIR) GLM ---\n');
+fprintf('Fitting targeted impulse deconvolution across %d participants...\n', num_ptps);
+t_fir_start = tic;
+
+SubjStats_FIR = job_fir.run(Hb);
+
+t_fir_elapsed = toc(t_fir_start);
+fprintf('Branch 2 complete: %d SubjStats generated in %.2f minutes (%.1f s/ptp).\n', ...
+    length(SubjStats_FIR), t_fir_elapsed / 60, t_fir_elapsed / num_ptps);
+
+%% 6c. Section C Verification & Save Check
+fprintf('\n--- Section C Verification Check ---\n');
+fprintf('SubjStats_HRF array size: [%s]\n', num2str(size(SubjStats_HRF)));
+fprintf('SubjStats_FIR array size: [%s]\n', num2str(size(SubjStats_FIR)));
+fprintf('HRF variables on SubjStats(1): %d beta rows estimated.\n', height(SubjStats_HRF(1).table));
+fprintf('FIR variables on SubjStats(1): %d beta rows estimated.\n', height(SubjStats_FIR(1).table));
+fprintf('--- Section C Execution Complete ---\n\n');
+
+
+
+
+
+
+
+
+% Section D
+% use fixation baseline start unless unavailable then use end
+% per participant contrast loop to avoid dimension mismatch
+% 6 ptps missing start 1, 2, 35, 3X, 41, 42
+
+
+% epochs 3d matrics - channels x timepoints x trials (?)
+
+% Quote from Methods
+% "Short-separation channel time-series were included as first-level
+% nuisance regressors to additionally control for superficial systemic 
+% artifacts."
+
+% Quote from Methods
+% "The activation signal for each of the channels over the session was 
+% then fit to an individual design matrix for each participant, using 
+% custom scripts calling the estimation functions from NIRS-ToolBox 
+% (Ye et al., 2009)."
+
+% Label blocks vs. events for the events
+% "In the first-level script (FirstLevel_GLM.m), you will configure how each condition key is modeled:
+% Blocks: Convolved with canonical HRF (nirs.design.basis.Canonical()).
+% Events: Convolved with canonical HRF plus its temporal derivative (nirs.design.basis.CanonicalWithDeriv()).
+% Short Channels: Added as nuisance regressors (AddShortPhysRegressors /
+% AddShortSepRegressors)." AI Summary
+
+% REcall that only th ecanonical hrf params carried forward
+% AI summary: 
+% "While you convolve event regressors with
+% nirs.design.basis.CanonicalWithDeriv(), the first-level GLM will produce 
+% two $\beta$ weights for each event condition:
+% cond_name:canonical
+% cond_name:derivative
+% When you construct your first-level baseline contrasts (Section D), you 
+% must contrast only the :canonical estimates and ignore the :derivative 
+% weights so that only the canonical $\beta$ values enter the second-level 
+% group models."
+
+% AI Summary: 
+% Sorting Stimulus by Block vs. Event (How It Actually Works)
+% In NIRS-Toolbox, the toolbox does not automatically know whether a 
+% stimulus key in raw.stimulus is a sustained block or a transient event. 
+% You must configure the basis model explicitly by condition name:
+% %% Section B: Configure Basis Functions (Block vs. Event)
+% j_glm = nirs.modules.GLM();
+% % Default: Canonical HRF for sustained blocks & baselines
+% j_glm.basis('default') = nirs.design.basis.Canonical();
+% % Explicitly assign Canonical + Temporal Derivative to transient events:
+% transient_events = {
+%     'Individual_Survey', ...
+%     'Consensus_Survey', ...
+%     'Spam_Popup', ...
+%     'First_Detector_Switch', ...
+%     'First_Status_Report', ...
+%     'Planning_Null_Event', ...
+%     'Nav_Baseline_Event', ...
+%     'Inter_Report_Null_Event'
+% };
+% for k = 1:length(transient_events)
+%     j_glm.basis(transient_events{k}) = nirs.design.basis.CanonicalWithDeriv();
+% end
+
+
+%% Section D. First-Level Contrasts & Hypothesis Testing (Task-Matched & Fixation)
+fprintf('\n============================================================\n');
+fprintf('  SECTION D: Computing First-Level Contrasts (Dual Baseline)\n');
+fprintf('============================================================\n');
+
+% -------------------------------------------------------------------------
+% 1. Define Phase-Matched Mapping (Option A - Primary per Method Document)
+% -------------------------------------------------------------------------
+task_matched_pairs = { ...
+    'planning_individual', 'planning_baseline'; ...
+    'planning_team',       'planning_baseline'; ...
+    'enroute_true_site',   'null_block'; ...
+    'enroute_decoy_site',  'null_block'; ...
+    'at_true_site',        'null_block'; ...
+    'at_decoy_site',       'null_block'; ...
+    'spam_pop_up',         'null_event_prespam'; ...
+    'status_check',        'null_event'; ...
+    'tricorder_switch',    'null_event'; ...
+    'certainty_individual','planning_baseline'; ...
+    'certainty_consensus', 'planning_baseline'  ...
+};
+
+% -------------------------------------------------------------------------
+% 2. Define Fixation Contrast Tasks (Option B - Physiological Rest)
+% -------------------------------------------------------------------------
+fixation_tasks = { ...
+    'planning_individual', ...
+    'planning_team', ...
+    'enroute_true_site', ...
+    'enroute_decoy_site', ...
+    'at_true_site', ...
+    'at_decoy_site', ...
+    'spam_pop_up', ...
+    'status_check', ...
+    'tricorder_switch', ...
+    'certainty_individual', ...
+    'certainty_consensus' ...
+};
+
+% -------------------------------------------------------------------------
+% 3. Pre-allocate Output Containers
+% -------------------------------------------------------------------------
+Contrasts_HRF = struct();
+Contrasts_HRF.TaskMatched = struct();
+Contrasts_HRF.Fixation    = struct();
+
+num_ptps = length(SubjStats_HRF);
+
+for p = 1:size(task_matched_pairs, 1)
+    Contrasts_HRF.TaskMatched.(task_matched_pairs{p, 1}) = repmat(nirs.core.ChannelStats, num_ptps, 1);
+end
+for t = 1:length(fixation_tasks)
+    Contrasts_HRF.Fixation.(fixation_tasks{t}) = repmat(nirs.core.ChannelStats, num_ptps, 1);
+end
+
+fprintf('Computing dual-baseline contrasts across %d participants...\n', num_ptps);
+t_contrast_start = tic;
+
+for i = 1:num_ptps
+    stats_i = SubjStats_HRF(i);
+    cond_names = stats_i.conditions;
+    
+    % -------------------------------------------------------------
+    % Detect available fixation baselines for Participant i
+    % -------------------------------------------------------------
+    idx_fix_start = find(strcmpi(cond_names, 'fixation_baseline_start') | ...
+                         strcmpi(cond_names, 'fixation_baseline_start:canonical'), 1);
+    idx_fix_end   = find(strcmpi(cond_names, 'fixation_baseline_end') | ...
+                         strcmpi(cond_names, 'fixation_baseline_end:canonical'), 1);
+    
+    has_start = ~isempty(idx_fix_start);
+    has_end   = ~isempty(idx_fix_end);
+    
+    % Pre-compute fixation weights [col_index, weight] and label for logging
+    if has_start && has_end
+        fix_weights = [idx_fix_start, -0.5; idx_fix_end, -0.5];
+        fix_desc = 'mean(fix_start, fix_end)';
+    elseif has_start
+        fix_weights = [idx_fix_start, -1.0];
+        fix_desc = 'fixation_baseline_start';
+    elseif has_end
+        fix_weights = [idx_fix_end, -1.0];
+        fix_desc = 'fixation_baseline_end';
+    else
+        fix_weights = [];
+        fix_desc = '';
+    end
+    
+    % -------------------------------------------------------------
+    % A. Task-Matched Contrasts (Option A)
+    % -------------------------------------------------------------
+    for p = 1:size(task_matched_pairs, 1)
+        task_name = task_matched_pairs{p, 1};
+        base_name = task_matched_pairs{p, 2};
+        
+        idx_task = find(strcmpi(cond_names, task_name) | strcmpi(cond_names, [task_name ':canonical']), 1);
+        idx_base = find(strcmpi(cond_names, base_name) | strcmpi(cond_names, [base_name ':canonical']), 1);
+        
+        if ~isempty(idx_task)
+            c = zeros(1, length(cond_names));
+            c(idx_task) = 1.0;
+            
+            % If participant has the task-matched baseline, use it (-1.0)
+            if ~isempty(idx_base)
+                c(idx_base) = -1.0;
+                desc_str = sprintf('%s - %s', task_name, base_name);
+            % Fallback to fixation baseline (averaged or single) if task baseline is missing
+            elseif ~isempty(fix_weights)
+                for w = 1:size(fix_weights, 1)
+                    c(fix_weights(w, 1)) = fix_weights(w, 2);
+                end
+                desc_str = sprintf('%s - %s', task_name, fix_desc);
+            else
+                continue; % No baseline available
+            end
+            
+            try
+                c_stats = stats_i.ttest(c);
+                c_stats.description = desc_str;
+                Contrasts_HRF.TaskMatched.(task_name)(i) = c_stats;
+            catch ME
+                fprintf('  [Ptp %02d] TaskMatched contrast %s failed: %s\n', i, task_name, ME.message);
+            end
+        end
+    end
+    
+    % -------------------------------------------------------------
+    % B. Fixation Contrasts (Option B - Physiological Rest)
+    % -------------------------------------------------------------
+    if ~isempty(fix_weights)
+        for t = 1:length(fixation_tasks)
+            task_name = fixation_tasks{t};
+            idx_task = find(strcmpi(cond_names, task_name) | strcmpi(cond_names, [task_name ':canonical']), 1);
+            
+            if ~isempty(idx_task)
+                c_fix = zeros(1, length(cond_names));
+                c_fix(idx_task) = 1.0;
+                
+                % Apply fixation baseline weight(s)
+                for w = 1:size(fix_weights, 1)
+                    c_fix(fix_weights(w, 1)) = fix_weights(w, 2);
+                end
+                
+                try
+                    c_stats = stats_i.ttest(c_fix);
+                    c_stats.description = sprintf('%s - %s', task_name, fix_desc);
+                    Contrasts_HRF.Fixation.(task_name)(i) = c_stats;
+                catch ME
+                    fprintf('  [Ptp %02d] Fixation contrast %s failed: %s\n', i, task_name, ME.message);
+                end
+            end
+        end
+    else
+        fprintf('  [Ptp %02d] Missing both fixation periods. Skipping Option B.\n', i);
+    end
+end
+
+t_contrast_elapsed = toc(t_contrast_start);
+fprintf('Dual contrasts completed in %.2f seconds!\n', t_contrast_elapsed);
+
+%% Section E. Save Results to Derivatives
+save_dir = fullfile(derivatives_dir, 'FirstLevel_Results');
+if ~exist(save_dir, 'dir')
+    mkdir(save_dir);
+end
+
+results_file = fullfile(save_dir, 'FirstLevel_Cohort_Stats.mat');
+fprintf('Saving results to: %s ...\n', results_file);
+save(results_file, 'SubjStats_HRF', 'SubjStats_FIR', 'Contrasts_HRF', '-v7.3');
+fprintf('Saved successfully. FirstLevel.m complete.\n\n');

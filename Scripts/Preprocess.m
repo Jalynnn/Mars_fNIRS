@@ -90,7 +90,8 @@ ptp_num = zeros(length(raw), 1);
 for k = 1:length(subj_names)
 
     % Only use the ptp id that comes after 'p' in the folder name
-    token = regexp(subj_names{k}, 'P(?<num>\d+(\.\d+)?)', 'names');
+    % token = regexp(subj_names{k}, 'P(?<num>\d+(\.\d+)?)', 'names');
+    token = regexp(subj_names{k}, 'P(?<num>\d+)', 'names');
     
     if ~isempty(token)
         ptp_num(k) = str2double(token.num);
