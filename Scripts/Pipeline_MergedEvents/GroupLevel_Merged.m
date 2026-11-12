@@ -38,7 +38,7 @@ fprintf('\n--- Loading First Level Data ---\n')
 
 % Set paths through folder to .mat file from FirstLevel
 results_dir = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents'; % OVERWRITTEN
-firstLevel_file = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents\FirstLevel_Cohort_Stats.mat'; % OVERWRITTEN
+firstLevel_file = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents\FirstLevel_Results\FirstLevel_Cohort_Stats.mat'; % OVERWRITTEN
 
 % Verify file exists
 if ~exist(firstLevel_file, 'file')
@@ -145,7 +145,7 @@ ssc_pairs = [
 mni_avg_file = fullfile(group_out_dir, 'MNIs_Average.mat');
 % Fallback check in Derivatives if not yet moved
 if ~exist(mni_avg_file, 'file')
-    alt_file = fullfile(project_root, 'Output', 'Pipeline_MergedEvents', 'MNIs_Average.mat');
+    alt_file = fullfile(project_root, 'Output', 'GroupLevel', 'MNIs_Average.mat');
     if exist(alt_file, 'file')
         copyfile(alt_file, mni_avg_file);
         fprintf('Copied MNIs_Average.mat into Output/Pipeline_MergedEvents.\n');
@@ -936,13 +936,15 @@ rq1_tasks = { ...
     'tricorder_switch', ...
     'certainty_individual', ...
     'certainty_consensus', ...
+    'sustained_true_site', ...   % <--- Added Event 12
+    'sustained_decoy_site' ...   % <--- Added Event 13
+};
+
+
     % 'at_true_site', ... % OVERWRITTEN
     % 'at_decoy_site', ...
     % 'enroute_true_site', ...
     % 'enroute_decoy_site' ...
-    'sustained_true_site', ...   % <--- Added Event 12
-    'sustained_decoy_site' ...   % <--- Added Event 13
-};
 
 chan_col_names = { ...
     'Baseline_Type', 'Task_Contrast', 'Timescale', 'Timescale_Num', ...
@@ -984,7 +986,7 @@ for c = 1:length(chroms)
             sub_tbl  = sub_tbl(:, intersect(req_vars, sub_tbl.Properties.VariableNames));
             sub_tbl  = rmmissing(sub_tbl);
             
-            if height(sub_tbl) < 10, continue; end
+            % if height(sub_tbl) < 10, continue; end
             if numel(unique(sub_tbl.Team_Perf_Dummy)) < 2, continue; end
             
             % 3. Calculate numeric precision weights (w = 1 / SE^2)
@@ -1072,7 +1074,7 @@ for c = 1:length(chroms)
             sub_tbl  = sub_tbl(:, intersect(req_vars, sub_tbl.Properties.VariableNames));
             sub_tbl  = rmmissing(sub_tbl);
             
-            if height(sub_tbl) < 10, continue; end
+            % if height(sub_tbl) < 10, continue; end
             if numel(unique(sub_tbl.Team_Perf_Dummy)) < 2, continue; end
             
             % Calculate numeric precision weights (w = 1 / SE_ROI^2)
@@ -1534,13 +1536,14 @@ rq2_tasks = { ...
     'tricorder_switch', ...
     'certainty_individual', ...
     'certainty_consensus', ...
+    'sustained_true_site', ...   % <--- Added Event 12
+    'sustained_decoy_site' ...   % <--- Added Event 13
+};
+
     % 'at_true_site', ... % OVERWRITTEN
     % 'at_decoy_site', ...
     % 'enroute_true_site', ...
     % 'enroute_decoy_site' ...
-    'sustained_true_site', ...   % <--- Added Event 12
-    'sustained_decoy_site' ...   % <--- Added Event 13
-};
 
 chan_col_names_rq2 = { ...
     'Baseline_Type', 'Task_Contrast', 'Timescale', 'Timescale_Num', ...
@@ -1585,7 +1588,7 @@ for c = 1:length(chroms)
             sub_tbl  = sub_tbl(:, intersect(req_vars, sub_tbl.Properties.VariableNames));
             sub_tbl  = rmmissing(sub_tbl);
             
-            if height(sub_tbl) < 10, continue; end
+            % if height(sub_tbl) < 10, continue; end
             if numel(unique(sub_tbl.SC_Centered)) < 3, continue; end
             
             % Precision weights normalized to mean 1
@@ -1695,7 +1698,7 @@ for c = 1:length(chroms)
             sub_tbl  = sub_tbl(:, intersect(req_vars, sub_tbl.Properties.VariableNames));
             sub_tbl  = rmmissing(sub_tbl);
             
-            if height(sub_tbl) < 10, continue; end
+            % if height(sub_tbl) < 10, continue; end
             if numel(unique(sub_tbl.SC_Centered)) < 3, continue; end
             
             raw_w = 1 ./ max(sub_tbl.SE_ROI .^ 2, 1e-6);

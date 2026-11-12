@@ -185,15 +185,27 @@ for i = 1:length(raw)
 
     % Subject was assigned when raw was created
     % Subject refers to the name of the folder/the ptp
-    subj_id = raw(i).demographics('Subject');
+    % Added strtrim due to issues with 13.2 and 15.2
+    subj_id = strtrim(raw(i).demographics('Subject'));
+
+    % Added due to issues with 13.2 and 15.2 folder names from split files
+    % Matches the exact folder name or cleaned folder strings 
+    match_mask = strcmp(strtrim(event_table.fnirs_folder), subj_id) | ...
+        strcmp(strrep(strtrim(event_table.fnirs_folder), '-', '_'), strrep(subj_id, '-', '_'));
 
     % Search events_table for only this subj_id
     % Save only the events for this subj
-    subj_events = event_table(strcmp(event_table.fnirs_folder, subj_id), :);
+    % Replaced during ptp 13 and 15 fixes to account for one or the other
+    % matches
+    % subj_events = event_table(strcmp(event_table.fnirs_folder, subj_id), :);
+    subj_events = event_table(match_mask, :);
 
     % Confirm there are events - yay easy confirm
     % if empty end, else continue
-    if isempty(subj_events), continue; end
+    if isempty(subj_events)
+        warning('Critical: No events found in CSV for subject "%s" (index %d). Skipped event replacement.', subj_id, i);
+        continue; 
+    end
 
     % Store the subj_events for each subj_id
     % Uses the struct defined above

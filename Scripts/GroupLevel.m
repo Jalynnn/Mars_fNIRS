@@ -66,7 +66,42 @@ fprintf('   - Contrasts_HRF: TaskMatched (%d tasks), Fixation (%d tasks)\n', ...
 %% Section B
 
 % Command Window Update
-fprintf('\n--- Defining ROIs w/ MNI Association ---\n')
+fprintf('\n--- Loading Registered MNI Coordinates & Defining ROIs ---\n')
+
+% Recall ptps already have their digitization pairs
+% We can extract the channel midpoints and classify channels into the 4
+% ROIs based on their MNI space coordinates
+
+% Another script was introduced to do this called
+% 'Register_Montage_James_Pipeline' so most of this process takes place
+% there
+
+% However, the format is:
+% Calculate MNI Midpoint from registered Probe1020 via digpts.txt
+% Run nfri 10 mm search on XYZABLT.mat and anatomlabel_final.m
+% MNI Atlas Key Table to export table with columns: Channel, Source,
+% Detector, MNI, BA, Anatomy
+% Form ROIs from BAs (left pfc, left parietal, etc.)
+% Section C will do the group LME stats to fit on ROIs
+
+% Set and create GroupLevel directory
+project_root    = 'D:\GitHub\Mars_fNIRS';
+group_out_dir   = fullfile(project_root, 'Output', 'GroupLevel');
+if ~exist(group_out_dir, 'dir'), mkdir(group_out_dir); end
+
+%% X. Define Channel Montage Configurations
+
+% Physical long channels mapped from Aurora montage (41 LONG channels)
+% 49 total - 8 SSCs
+long_sd_pairs = [
+    1, 1;   1, 2;   1, 3;   2, 2;   2, 3;   2, 4;   3, 1;   3, 3;   4, 3;   4, 4;
+    3, 10;  9, 1;   9, 9;   9, 10;  10, 9;  10, 10; 10, 11; 11, 10; 11, 11;
+    5, 5;   5, 7;   6, 5;   6, 6;   7, 5;   7, 6;   7, 7;   7, 8;   8, 6;   8, 8;
+    12, 12; 12, 13; 13, 13; 13, 14; 14, 12; 14, 13; 14, 14; 14, 15;
+    15, 14; 15, 15; 16, 12; 16, 15
+];
+
+num_channels = size(long_sd_pairs, 1); % 41
 
 % Part of identifying the 41 long channels is excluding the 8 SSCs which
 % were previously identified and available in the Output folder
@@ -81,68 +116,10 @@ ssc_pairs = [
     15, 13
 ];
 
-% Recall ptps already have their digitization pairs
-% We can extract the channel midpoints and classify channels into the 4
-% ROIs based on their MNI space coordinates
+%% X. Load Pre-Computed Group Cortical MNI Coordinates
 
-
-
-
-
-
-
-
-
-
-
-
-
-% [41 Hardware Pairs (S-D)] 
-%          │
-%          ▼
-% [Step 3a: Calculate MNI Midpoints]  <-- From your registered Probe1020 / digpts.txt
-%          │
-%          ▼
-% [Step 3b: anatomlabel_final.m]     <-- Runs NFRI 10 mm spherical search on XYZABLT.mat
-%          │
-%          ▼
-% [Step 3c: MNI Atlas Key Table]      <-- Exports Table (Channel, S, D, MNI, BA, Anatomy)
-%          │
-%          ▼
-% [Step 3d: Form ROIs from BAs]       <-- L_PFC (BA9/46/10), L_PAR (BA7/39/40), etc.
-%          │
-%          ▼
-% [Section C: Group LME / Stats]      <-- Fit models on ROIs backed by anatomical labels
-
-%% =========================================================================
-%  SECTION B: Load Pre-Computed Group MNI Coordinates & Assign ROIs
-%  =========================================================================
-fprintf('\n--- Section B: Loading Registered MNI Coordinates & Defining ROIs ---\n');
-
-% Set and create GroupLevel directory
-project_root    = 'D:\GitHub\Mars_fNIRS';
-group_out_dir   = fullfile(project_root, 'Output', 'GroupLevel');
-if ~exist(group_out_dir, 'dir'), mkdir(group_out_dir); end
-
-%% 1. Define Channel Montage Configurations
-% Physical long channels mapped from Aurora montage (41 channels)
-long_sd_pairs = [
-    1, 1;   1, 2;   1, 3;   2, 2;   2, 3;   2, 4;   3, 1;   3, 3;   4, 3;   4, 4;   % Frontal (L)
-    3, 10;  9, 1;   9, 9;   9, 10;  10, 9;  10, 10; 10, 11; 11, 10; 11, 11;         % Frontal (R)
-    5, 5;   5, 7;   6, 5;   6, 6;   7, 5;   7, 6;   7, 7;   7, 8;   8, 6;   8, 8;   % Parietal (L)
-    12, 12; 12, 13; 13, 13; 13, 14; 14, 12; 14, 13; 14, 14; 14, 15;                % Parietal (R)
-    15, 14; 15, 15; 16, 12; 16, 15                                                  % Parietal (R)
-];
-num_channels = size(long_sd_pairs, 1); % 41
-
-% 8 known short-separation pairs from NIRSport2 (to verify exclusion)
-ssc_pairs = [
-    4, 16;  6, 17;  7, 18;  8, 19;
-    11, 20; 13, 21; 14, 22; 15, 23
-];
-
-%% 2. Load Pre-Computed Group Cortical MNI Coordinates
 mni_avg_file = fullfile(group_out_dir, 'MNIs_Average.mat');
+
 % Fallback check in Derivatives if not yet moved
 if ~exist(mni_avg_file, 'file')
     alt_file = fullfile(project_root, 'Data', 'Derivatives', 'FirstLevel_Results', 'MNIs_Average.mat');
@@ -153,37 +130,44 @@ if ~exist(mni_avg_file, 'file')
         error('Pre-computed MNI file missing at: %s', mni_avg_file);
     end
 end
-load(mni_avg_file, 'MNIs_Mean'); % 41 x 3 cortical coordinates
+
+load(mni_avg_file, 'MNIs_Mean'); % 41 x 3 coords (X, Y, Z)
+
+% Command window prompt
 fprintf('Loaded pre-computed group cortical MNI coordinates for %d channels.\n', size(MNIs_Mean, 1));
 
-%% 3. Assign 5 Functional ROIs Based on MNI Coordinates & Brodmann Areas
-% Text Specification:
+%% X. Assign 5 Functional ROIs Based on MNI Coordinates & Brodmann Areas
+
+% Method doc (added left/right parietal):
 % - RPFC (BA 10): Rostral Prefrontal Cortex (medial frontopolar: Y >= 68 mm, Z <= 21 mm)
 % - L_DLPFC (BA 9/46): Left Dorsolateral Prefrontal Cortex (Y > 50 mm, X < 0)
 % - R_DLPFC (BA 9/46): Right Dorsolateral Prefrontal Cortex (Y > 50 mm, X > 0)
 % - L_Parietal (BA 7/40): Left Posterior Parietal Cortex (Y <= 50 mm, X < 0)
 % - R_Parietal (BA 7/40): Right Posterior Parietal Cortex (Y <= 50 mm, X > 0)
+
 roi_assignments = cell(num_channels, 1);
+
 for c = 1:num_channels
     x_coord = MNIs_Mean(c, 1);
     y_coord = MNIs_Mean(c, 2);
     z_coord = MNIs_Mean(c, 3);
     
-    if y_coord > 50  % Prefrontal Cortex Montage (Channels 1-19)
+    if y_coord > 50 % Prefrontal Cortex Montage (Channels 1-19)
+        
         if y_coord >= 68 && z_coord <= 21
-            roi_assignments{c} = 'RPFC';      % Frontal Pole / BA 10
+            roi_assignments{c} = 'RPFC'; % Frontal Pole / BA 10
         else
             if x_coord < 0
-                roi_assignments{c} = 'L_DLPFC';  % Left BA 9/46
+                roi_assignments{c} = 'L_DLPFC'; % Left BA 9/46
             else
-                roi_assignments{c} = 'R_DLPFC';  % Right BA 9/46
+                roi_assignments{c} = 'R_DLPFC'; % Right BA 9/46
             end
         end
-    else             % Parietal Montage (Channels 20-41, BA 7/40)
+    else % Parietal Montage (Channels 20-41, BA 7/40)
         if x_coord < 0
-            roi_assignments{c} = 'L_Parietal';   % Left BA 7/40 (Channels 20-29)
+            roi_assignments{c} = 'L_Parietal'; % Left BA 7/40 (Channels 20-29)
         else
-            roi_assignments{c} = 'R_Parietal';   % Right BA 7/40 (Channels 30-41)
+            roi_assignments{c} = 'R_Parietal'; % Right BA 7/40 (Channels 30-41)
         end
     end
 end
@@ -193,7 +177,8 @@ Master_Atlas_Table = table((1:num_channels)', long_sd_pairs(:,1), long_sd_pairs(
     MNIs_Mean(:,1), MNIs_Mean(:,2), MNIs_Mean(:,3), roi_assignments, ...
     'VariableNames', {'Channel', 'Source', 'Detector', 'MNI_X', 'MNI_Y', 'MNI_Z', 'ROI'});
 
-%% 4. Validation & Sanity Checks
+%% X. Validation & Sanity Checks
+
 if height(Master_Atlas_Table) ~= 41
     warning('Expected exactly 41 long channels, but found %d!', height(Master_Atlas_Table));
 end
@@ -206,7 +191,10 @@ end
 
 % Verify all 5 method-specified ROIs are populated without empty groups
 roi_names = {'RPFC', 'L_DLPFC', 'R_DLPFC', 'L_Parietal', 'R_Parietal'};
+
+% Command window prompt
 fprintf('Assigned Channels across Method-Specified ROIs (5 ROIs):\n');
+
 for r = 1:length(roi_names)
     count = sum(strcmp(string(Master_Atlas_Table.ROI), roi_names{r}));
     if count == 0
@@ -216,37 +204,28 @@ for r = 1:length(roi_names)
     end
 end
 
-% Save Master Key Table to Output/GroupLevel
+% Save Master Key Table to Output/GroupLevel (Not in Scripts folder)
 atlas_key_file = fullfile(group_out_dir, 'Cortical_41Channels_MNI_Atlas_Key.csv');
 writetable(Master_Atlas_Table, atlas_key_file);
 save(fullfile(group_out_dir, 'Master_Atlas_Key.mat'), 'Master_Atlas_Table');
+
+% Command window update prompt
 fprintf('Master Atlas Key verified and saved to: %s\n', atlas_key_file);
 
+%% Section C
 
+% Fix the covariates and prep for models
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-% AI
-% Methods doc
-% " Age was mean-centered across participants; sex and the second-destination indicator were dummy-coded (0 = female, 1 = male; 0 = no second destination, 1 = second destination),"
-% 5
+% Methods doc quotes
+% "Age was mean-centered across participants; sex and the second-destination 
+% indicator were dummy-coded (0 = female, 1 = male; 0 = no second destination, 
+% 1 = second destination),"
 % "All second-level group models included participant age, sex, and a
-% binary indicator of whether the dyad visited a second destination as fixed-effect covariates."
-%% =========================================================================
-%  SECTION C: Participant Covariates & Predictor Preparation
-%  =========================================================================
-fprintf('\n--- Section C: Participant Demographics & Covariate Preparation ---\n');
+% binary indicator of whether the dyad visited a second destination as 
+% fixed-effect covariates."
+
+% Command window update prompt
+fprintf('\n--- Participant Demographics & Covariate Preparation ---\n');
 
 % Ensure unified group output directory is set
 if ~exist('group_out_dir', 'var')
@@ -255,19 +234,19 @@ if ~exist('group_out_dir', 'var')
 end
 if ~exist(group_out_dir, 'dir'), mkdir(group_out_dir); end
 
-%% Step 4. Harvest Individual Demographics & Metrics from SubjStats
+%% X. Harvest Individual Demographics & Metrics from SubjStats
 num_ptps = length(SubjStats_HRF);
 
 % Initialize metadata containers
-ptp_id           = zeros(num_ptps, 1);
-session_id       = cell(num_ptps, 1);
-age_raw          = nan(num_ptps, 1);
-gender_raw       = cell(num_ptps, 1);
-team_perf_raw    = nan(num_ptps, 1);
-intended_both    = nan(num_ptps, 1);
-exec_cert_final  = nan(num_ptps, 1);
+ptp_id = zeros(num_ptps, 1);
+session_id = cell(num_ptps, 1);
+age_raw = nan(num_ptps, 1);
+gender_raw = cell(num_ptps, 1);
+team_perf_raw = nan(num_ptps, 1);
+intended_both = nan(num_ptps, 1);
+exec_cert_final = nan(num_ptps, 1);
 exec_cert_signed = nan(num_ptps, 1);
-exec_cert_time   = nan(num_ptps, 1);
+exec_cert_time = nan(num_ptps, 1);
 
 % Optional fallback load from CSV if demographics dictionary lacks new fields
 demo_csv_file = 'D:\GitHub\Mars_fNIRS\Data\Demographics\fnirs_demographics_spyV4.csv';
@@ -304,19 +283,15 @@ for i = 1:num_ptps
     end
 end
 
-%% Step 5. Predictor Centering & Categorical Coding
-% -------------------------------------------------------------------------
-% 1. Continuous Covariate: Age (Mean-Centered)
-% -------------------------------------------------------------------------
+%% X. Predictor Centering & Categorical Coding
+% Continuous Covariate: Age (Mean-Centered)
 mean_age = mean(age_raw, 'omitnan');
 age_centered = age_raw - mean_age;
 fprintf('Age centered around cohort mean: %.2f years (range: %d - %d).\n', ...
     mean_age, min(age_raw), max(age_raw));
 
-% -------------------------------------------------------------------------
-% 2. Categorical Covariate: Gender / Biosex
+% Categorical Covariate: Gender / Biosex
 % Coding: 1 = Female (ref), 2 = Male, 3/4 = Other
-% -------------------------------------------------------------------------
 gender_labels = strings(num_ptps, 1);
 gender_dummy  = zeros(num_ptps, 1); % Numeric reference: 0 = Female, 1 = Male, 2 = Other
 for i = 1:num_ptps
@@ -332,21 +307,18 @@ for i = 1:num_ptps
         gender_dummy(i)  = 2;
     end
 end
+
 % Cast to categorical with Female explicitly declared first as reference
 gender_cat = categorical(gender_labels, {'Female', 'Male', 'Other'});
 
-% -------------------------------------------------------------------------
-% 3. Task Outcome: Team Performance (Dummy Coded: 1 = Correct/True, 0 = Decoy)
-% -------------------------------------------------------------------------
+% Task Outcome: Team Performance (Dummy Coded: 1 = Correct/True, 0 = Decoy)
 if all(ismember(team_perf_raw(~isnan(team_perf_raw)), [0, 1]))
     team_perf_dummy = team_perf_raw;
 else
     team_perf_dummy = double(team_perf_raw > median(team_perf_raw, 'omitnan'));
 end
 
-% -------------------------------------------------------------------------
-% 4. Behavioral Metrics: Certainty (Unsigned C & Signed SC) & Elapsed Time
-% -------------------------------------------------------------------------
+% Behavioral Metrics: Certainty (Unsigned C & Signed SC) & Elapsed Time
 % Unsigned Certainty (C)
 mean_cert     = mean(exec_cert_final, 'omitnan');
 cert_centered = exec_cert_final - mean_cert;
@@ -364,9 +336,7 @@ fprintf('  -> Unsigned Certainty (C):  mean = %.2f (range: %d - %d)\n', mean_cer
 fprintf('  -> Signed Certainty (SC):   mean = %.2f (range: %d - %d)\n', mean_sc, min(exec_cert_signed), max(exec_cert_signed));
 fprintf('  -> Elapsed Time (s):        mean = %.2f (range: %d - %d)\n', mean_time, min(exec_cert_time), max(exec_cert_time));
 
-% -------------------------------------------------------------------------
-% 5. Second Destination Covariate (Second[d])
-% -------------------------------------------------------------------------
+% Second Destination Covariate (Second)
 if all(isnan(intended_both))
     second_dest_dummy = zeros(num_ptps, 1);
 else
@@ -396,34 +366,12 @@ save_cov_file = fullfile(group_out_dir, 'Cohort_Covariates_Table.csv');
 writetable(Cohort_Covariates, save_cov_file);
 fprintf('Saved Covariate Table to: %s\n', save_cov_file);
 
+%% Section D
 
+% Command window update prompt
+fprintf('\n--- Constructing Track 1 (Channels) & Track 2 (ROIs) ---\n');
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-% AI
-%% =========================================================================
-%  SECTION D: Setup Two Tracks for Group-Level Analysis (w/ HbDiff)
-%  =========================================================================
-fprintf('\n--- Section D: Constructing Track 1 (Channels) & Track 2 (ROIs) ---\n');
-
-%% Step 6. Setup Two Tracks for Group-Level Analysis
+% Setup Two Tracks for Group-Level Analysis
 if ~exist('group_out_dir', 'var')
     group_out_dir = 'D:\GitHub\Mars_fNIRS\Output\GroupLevel';
 end
@@ -449,9 +397,10 @@ end
 contrast_types = {'TaskMatched', 'Fixation'};
 track1_cell = {};
 
-%% -------------------------------------------------------------------------
-%% 6A. Track 1: Channel-Wise Long Table Construction (HbO & HbR)
-%% -------------------------------------------------------------------------
+% (6A Detailed.txt) Track 1: Channel-Wise Long Table Construction (HbO & HbR)
+% TASK: Update detailed.txt
+
+% Command window update prompt
 fprintf('Building Track 1: Channel-level long table...\n');
 
 for ct = 1:length(contrast_types)
@@ -563,9 +512,7 @@ if isempty(track1_cell)
 end
 Track1_Channel_Long_Table = vertcat(track1_cell{:});
 
-%% -------------------------------------------------------------------------
-%% 6A.1 Exact Vectorized HbDiff Calculation (Track 1)
-%% -------------------------------------------------------------------------
+% (6A.1) Exact Vectorized HbDiff Calculation (Track 1)
 fprintf('Computing exact HbDiff (HbO - HbR) for Track 1 Channels...\n');
 
 idx_hbo = find(Track1_Channel_Long_Table.Chromophore == "HBO");
@@ -602,9 +549,7 @@ t1_diff.P_Val  = diff_p;
 Track1_Channel_Long_Table = [Track1_Channel_Long_Table; t1_diff];
 fprintf('Track 1 Long Table finalized: %d rows.\n', height(Track1_Channel_Long_Table));
 
-%% -------------------------------------------------------------------------
-%% 6B. Track 2: ROI-Averaged Long Table Construction (w/ HbDiff)
-%% -------------------------------------------------------------------------
+% (6B) Track 2: ROI-Averaged Long Table Construction (w/ HbDiff)
 fprintf('Building Track 2: ROI-averaged long table...\n');
 
 [roi_groups, grp_p_id, grp_s_id, grp_base, grp_task, grp_tscale, grp_tnum, grp_chrom, grp_roi] = findgroups( ...
@@ -649,9 +594,7 @@ Track2_ROI_Long_Table = table( ...
 fprintf('Track 2 Long Table generated (HBO, HBR, HBDIFF): %d rows x %d columns.\n', ...
     height(Track2_ROI_Long_Table), width(Track2_ROI_Long_Table));
 
-%% -------------------------------------------------------------------------
-%% 6C. Cast Grouping Factors & Categorical Predictors
-%% -------------------------------------------------------------------------
+% (6C -- Ah X for now? - Need to fix detailed.txt) Cast Grouping Factors & Categorical Predictors
 fprintf('Casting grouping and model factors to categorical...\n');
 
 % Format Gender_Dummy as categorical with Female (0) as reference
@@ -680,9 +623,7 @@ Track2_ROI_Long_Table.Timescale          = categorical(Track2_ROI_Long_Table.Tim
 Track2_ROI_Long_Table.Baseline_Type      = categorical(Track2_ROI_Long_Table.Baseline_Type);
 Track2_ROI_Long_Table.Task_Contrast      = categorical(Track2_ROI_Long_Table.Task_Contrast);
 
-%% -------------------------------------------------------------------------
-%% 6D. Export Deliverables to Mars_fNIRS\Output\GroupLevel
-%% -------------------------------------------------------------------------
+% (6D) Export Deliverables to Mars_fNIRS\Output\GroupLevel
 track1_file     = fullfile(group_out_dir, 'Track1_Channel_Long_Table.csv');
 track2_file     = fullfile(group_out_dir, 'Track2_ROI_Long_Table.csv');
 save_tracks_mat = fullfile(group_out_dir, 'GroupLevel_Tracks_Data.mat');
@@ -694,26 +635,11 @@ save(save_tracks_mat, 'Track1_Channel_Long_Table', 'Track2_ROI_Long_Table');
 fprintf('Section D complete. Saved track files to:\n  -> %s\n  -> %s\n  -> %s\n', ...
     track1_file, track2_file, save_tracks_mat);
 
+%% Section E: 
+% Baseline Manip Check
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-%% =========================================================================
-%  SECTION E: LME Manipulation Checks (Validation) & FIR Inspection
-%  =========================================================================
-
-fprintf('\n--- Section E: Running Validation LME Models (Step 7) ---\n');
+% Command window update prompt
+fprintf('\n--- Running Validation LME Models (Step 7 approx) ---\n');
 
 % Set primary baseline filter to TaskMatched
 primary_baseline = 'TaskMatched';
@@ -726,10 +652,10 @@ tasks    = categories(Track1_Channel_Long_Table.Task_Contrast);
 channels = unique(Track1_Channel_Long_Table.Channel);
 rois     = categories(Track2_ROI_Long_Table.ROI);
 
-%% -------------------------------------------------------------------------
-%% 7A. Track 1: Channel-Level Intercept-Only Models (H0: beta0 = 0)
-%% Formula: Beta ~ 1 + (1 | Session_ID)
-%% -------------------------------------------------------------------------
+% (7A) Track 1: Channel-Level Intercept-Only Models (H0: beta0 = 0)
+% Formula: Beta ~ 1 + (1 | Session_ID)
+
+% Command window update prompt
 fprintf('Evaluating Track 1: Channel manipulation checks across 41 channels...\n');
 
 for c = 1:length(chroms)
@@ -750,6 +676,7 @@ for c = 1:length(chroms)
             if height(sub_tbl) < 5, continue; end
             
             try
+                % MEETING MODEL 1 BASELINE
                 lme = fitlme(sub_tbl, 'Beta ~ 1 + (1 | Session_ID)');
                 
                 b0    = lme.Coefficients.Estimate(1);
@@ -766,7 +693,7 @@ for c = 1:length(chroms)
                     b0, se0, tstat, pval, ci(1,1), ci(1,2) ...
                 };
             catch
-                % Skip occasional non-converging or singular channel fit
+                % Skip (occasional non-converging or singular channel fit)
             end
         end
     end
@@ -778,12 +705,13 @@ Table_Validation_Channels = cell2table(validation_chan_rows, 'VariableNames', { 
     'Beta_0', 'SE', 'T_Stat', 'P_Val', 'CI_Lower', 'CI_Upper' ...
 });
 
+% Command window update prompt
 fprintf('Track 1 Channel Validation complete: %d models evaluated.\n', height(Table_Validation_Channels));
 
-%% -------------------------------------------------------------------------
-%% 7B. Track 2: ROI-Level Intercept-Only Models (H0: beta0 = 0)
-%% Formula: Beta_ROI ~ 1 + (1 | Session_ID)
-%% -------------------------------------------------------------------------
+% (7B) Track 2: ROI-Level Intercept-Only Models (H0: beta0 = 0)
+% Formula: Beta_ROI ~ 1 + (1 | Session_ID)
+
+% Command window update
 fprintf('Evaluating Track 2: ROI manipulation checks across %d ROIs and %d chromophores...\n', ...
     length(rois), length(chroms));
 
@@ -833,9 +761,10 @@ Table_Validation_ROI = cell2table(validation_roi_rows, 'VariableNames', { ...
 
 fprintf('Track 2 ROI Validation complete: %d models evaluated.\n', height(Table_Validation_ROI));
 
-%% -------------------------------------------------------------------------
-%% 7C. FIR Impulse Shape Validation Check
-%% -------------------------------------------------------------------------
+% Debating on keepign FIR for shape validation
+% (7C) FIR Impulse Shape Validation Check
+
+% Command window update prompt
 fprintf('Verifying FIR dataset availability from SubjStats_FIR...\n');
 
 if exist('SubjStats_FIR', 'var') && ~isempty(SubjStats_FIR)
@@ -844,9 +773,7 @@ else
     warning('SubjStats_FIR not found in memory. Proceeding without FIR array inspection.');
 end
 
-%% -------------------------------------------------------------------------
-%% 7D. Export Deliverables to Scripts/Output/GroupLevel
-%% -------------------------------------------------------------------------
+% (7D) Export Deliverables to Scripts/Output/GroupLevel
 val_chan_csv = fullfile(group_out_dir, 'Table_Validation_ManipulationChecks_Channels.csv');
 val_roi_csv  = fullfile(group_out_dir, 'Table_Validation_ManipulationChecks_ROI.csv');
 val_mat      = fullfile(group_out_dir, 'GroupLevel_Validation_Models.mat');
@@ -864,26 +791,14 @@ fprintf('\nSignificant ROI-level manipulation checks (p < .05, uncorrected): %d 
     height(sig_roi), height(Table_Validation_ROI));
 disp(head(sig_roi(:, {'Task_Contrast', 'Chromophore', 'ROI', 'Beta_0', 'T_Stat', 'P_Val'}), 12));
 
+%% Section F (RQ1)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-% AI
 % 8B "All second-level group models included participant age, sex, and a
 % binary indicator of whether the dyad visited a second destination as fixed-effect covariates."
 
+% this is where I had to confirm second dest as optional for those that
+% didn't have it - maybe it would have been fine without since tricorder
+% was fine without?
 % if numel(categories(sub_tbl.Second_Dest_Dummy)) > 1
 %     formula_str = 'Beta ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
 % else
@@ -896,22 +811,26 @@ disp(head(sig_roi(:, {'Task_Contrast', 'Chromophore', 'ROI', 'Beta_0', 'T_Stat',
 % or 1 based on first arrival + age in years mean centered + gender dummy
 % coded + 1 or 0 based on if a second location was visited + dyad intercept
 % + validation
-% "LME modeling was selected to handle the hierarchical, nested dependencies inherent to dyadic data. Because each participant contributes one contrast estimate per model, each model included a random intercept for dyad."
+% "LME modeling was selected to handle the hierarchical, nested dependencies 
+% inherent to dyadic data. Because each participant contributes one contrast 
+% estimate per model, each model included a random intercept for dyad."
 
-% "Team Performance (Binary Outcome): LME models evaluated ROI contrast
-% estimates as a function of the binary team performance outcome (Correct vs.\ Decoy first-site selection), with the random intercept for dyad accounting for cross-partner dependencies. "
+% "Team Performance: LME models evaluated ROI contrast
+% estimates as a function of the binary team performance outcome 
+% (Correct vs.\ Decoy first-site selection), with the random intercept for 
+% dyad accounting for cross-partner dependencies. "
 % represents: 
 % formula_str = 'Beta_ROI ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
 % lme = fitlme(sub_tbl, formula_str);
-%% =========================================================================
-%  SECTION F: RQ1 - Team Performance Group LME Models (Step 8)
-%  [Precision-Weighted via Inverse-Variance Weights: w = 1 / SE^2]
-%  =========================================================================
-fprintf('\n--- Section F: Evaluating RQ1 Team Performance LME Models (Precision-Weighted) ---\n');
+
+% Precision-Weighted via Inverse-Variance Weights: w = 1 / SE^2
+
+% Command window update prompt
+fprintf('\n--- Evaluating RQ1 Team Performance LME Models ---\n');
 
 primary_baseline = 'TaskMatched';
 rq1_chan_rows = {};
-rq1_roi_rows  = {};
+rq1_roi_rows = {};
 
 chroms   = categories(Track1_Channel_Long_Table.Chromophore);
 channels = unique(Track1_Channel_Long_Table.Channel);
@@ -954,9 +873,7 @@ roi_col_names = { ...
     'P_Val', 'CI_Lower', 'CI_Upper', 'Cohens_d' ...
 };
 
-%% -------------------------------------------------------------------------
-%% 8A. Track 1: Channel-Level Models for RQ1 (Optode Resolution)
-%% -------------------------------------------------------------------------
+% (8A) Track 1: Channel-Level Models for RQ1
 fprintf('Evaluating Track 1: Precision-weighted channel models across 41 channels and %d tasks...\n', ...
     length(rq1_tasks));
 
@@ -969,7 +886,7 @@ for c = 1:length(chroms)
         for t = 1:length(rq1_tasks)
             task_str = rq1_tasks{t};
             
-            % 1. Primary slice
+            % Primary slice
             sub_idx = Track1_Channel_Long_Table.Baseline_Type == primary_baseline & ...
                       Track1_Channel_Long_Table.Chromophore == chrom_str & ...
                       Track1_Channel_Long_Table.Channel == chan_num & ...
@@ -977,7 +894,7 @@ for c = 1:length(chroms)
                   
             sub_tbl = Track1_Channel_Long_Table(sub_idx, :);
             
-            % 2. Extract complete cases across model variables
+            % Extract complete cases across model variables
             req_vars = {'Beta', 'SE', 'Team_Perf_Dummy', 'Age_Centered', 'Gender_Dummy', 'Second_Dest_Dummy', 'Session_ID'};
             sub_tbl  = sub_tbl(:, intersect(req_vars, sub_tbl.Properties.VariableNames));
             sub_tbl  = rmmissing(sub_tbl);
@@ -985,23 +902,34 @@ for c = 1:length(chroms)
             if height(sub_tbl) < 10, continue; end
             if numel(unique(sub_tbl.Team_Perf_Dummy)) < 2, continue; end
             
-            % 3. Calculate numeric precision weights (w = 1 / SE^2)
+            % Calculate numeric precision weights (w = 1 / SE^2)
+            % Squared standard error is ptp noise from contrast estimate
+            % from first-level analysis
             raw_w = 1 ./ max(sub_tbl.SE .^ 2, 1e-6);
             w_vec = raw_w / mean(raw_w);
             
-            % 4. Drop unobserved categories
-            sub_tbl.Gender_Dummy      = removecats(categorical(sub_tbl.Gender_Dummy));
+            % Drop unobserved categories
+            % Convert to categorical
+            % Remove labels that don't appear for that pair like a second
+            % dest
+            sub_tbl.Gender_Dummy = removecats(categorical(sub_tbl.Gender_Dummy));
             sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
-            sub_tbl.Session_ID        = removecats(categorical(sub_tbl.Session_ID));
+            sub_tbl.Session_ID = removecats(categorical(sub_tbl.Session_ID));
             
             try
+                % MEETING MODEL 2 RQ1 TEAM PERFORMANCE
                 if numel(categories(sub_tbl.Second_Dest_Dummy)) > 1
                     formula_str = 'Beta ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
                 else
                     formula_str = 'Beta ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + (1 | Session_ID)';
                 end
-                
+                % MEETING MODEL 2 RQ1 TEAM PERFORMANCE - WEIGHTS
                 lme = fitlme(sub_tbl, formula_str, 'Weights', w_vec);
+                % Method quote:
+                % "Second-level fits are precision-weighted: observations 
+                % are pre-whitened by each participant's first-level 
+                % contrast covariance (toolbox default), so noisier 
+                % contrast estimates carry less weight. "
                 
                 team_idx = find(strcmp(lme.CoefficientNames, 'Team_Perf_Dummy'));
                 if isempty(team_idx), continue; end
@@ -1030,7 +958,7 @@ for c = 1:length(chroms)
                     b1, se1, tstat, df, pval, ci_l, ci_u, cohens_d ...
                 };
             catch
-                % Silently skip ill-conditioned channel geometries
+                % Skip (ill-conditioned channel geometries)
             end
         end
     end
@@ -1043,9 +971,7 @@ else
 end
 fprintf('Track 1 RQ1 Channels complete: %d channel models evaluated.\n', height(Table_RQ1_Channels));
 
-%% -------------------------------------------------------------------------
-%% 8B. Track 2: ROI-Level Models for RQ1
-%% -------------------------------------------------------------------------
+% (8B) Track 2: ROI-Level Models for RQ1
 fprintf('Evaluating Track 2: Precision-weighted ROI models across %d ROIs, %d tasks, and %d chromophores...\n', ...
     length(rois), length(rq1_tasks), length(chroms));
 
@@ -1126,7 +1052,7 @@ else
     Table_RQ1_ROI = cell2table(rq1_roi_rows, 'VariableNames', roi_col_names);
 end
 
-%% Multiple Comparisons Correction: Benjamini-Hochberg FDR (q < .05)
+% Multiple Comparisons Correction: Benjamini-Hochberg FDR (q < .05)
 Table_RQ1_ROI.P_FDR   = nan(height(Table_RQ1_ROI), 1);
 Table_RQ1_ROI.Sig_FDR = false(height(Table_RQ1_ROI), 1);
 
@@ -1153,9 +1079,7 @@ for c = 1:length(chroms)
 end
 fprintf('Track 2 RQ1 ROI complete: %d models evaluated.\n', height(Table_RQ1_ROI));
 
-%% -------------------------------------------------------------------------
-%% 8C. Export Deliverables to Mars_fNIRS\Output\GroupLevel
-%% -------------------------------------------------------------------------
+% (8C) Export Deliverables to Mars_fNIRS\Output\GroupLevel
 rq1_chan_csv = fullfile(group_out_dir, 'Table_RQ1_TeamPerformance_Channels.csv');
 rq1_roi_csv  = fullfile(group_out_dir, 'Table_RQ1_TeamPerformance_ROI.csv');
 rq1_mat      = fullfile(group_out_dir, 'GroupLevel_RQ1_Models.mat');
@@ -1178,15 +1102,13 @@ if ~isempty(sig_uncorr)
     disp(sig_uncorr(:, {'Task_Contrast', 'Chromophore', 'ROI', 'Beta_TeamPerf', 'CI_Lower', 'CI_Upper', 'T_Stat', 'Cohens_d', 'P_Val', 'P_FDR'}));
 end
 
-%% =========================================================================
-%% PUBLICATION TABLE EXPORT: RQ1 TEAM PERFORMANCE (CHANNELS & ROIS)
-%% Formatted with Standardization, N-counts, and Brodmann Area Mapping
-%% =========================================================================
+% PUBLICATION TABLE EXPORT: RQ1 TEAM PERFORMANCE (CHANNELS & ROIS)
+% Formatted with Standardization, N-counts, and Brodmann Area Mapping
+
+% 
 fprintf('\n=== Generating Publication Tables for RQ1 ===\n');
 
-%% -------------------------------------------------------------------------
-%% 1. Process Track 1: Channel-Level Table (Table II Style)
-%% -------------------------------------------------------------------------
+% X. Process Track 1: Channel-Level Table (Table II Style)
 fprintf('Formatting Track 1 Channel Publication Table...\n');
 
 n_chan_models = height(Table_RQ1_Channels);
@@ -1264,10 +1186,8 @@ Table_RQ1_Channels_Pub = table( ...
     } ...
 );
 
-%% =========================================================================
-%% TRACK 1 CHANNELS: OPTION B FDR (PER TASK CONTRAST x CHROMOPHORE)
-%% m <= 41 Channels per Topographic Family
-%% =========================================================================
+% TRACK 1 CHANNELS: OPTION B FDR (PER TASK CONTRAST x CHROMOPHORE)
+% m <= 41 Channels per Topographic Family
 fprintf('\n--- Computing Option B FDR for Track 1 Channels (Per Task x Chromophore) ---\n');
 
 chroms = categories(categorical(Table_RQ1_Channels_Pub.Chromophore));
@@ -1313,9 +1233,7 @@ pub_vars = { ...
 };
 Table_RQ1_Channels_Pub = Table_RQ1_Channels_Pub(:, pub_vars);
 
-%% -------------------------------------------------------------------------
-%% Update CSV Exports in Output/GroupLevel and RQ_Sig
-%% -------------------------------------------------------------------------
+% Update CSV Exports in Output/GroupLevel and RQ_Sig
 chan_pub_csv = fullfile(group_out_dir, 'Table_RQ1_Publication_Channels.csv');
 sig_chan_csv = fullfile(group_out_dir, 'RQ_Sig', 'Table_RQ1_Significant_Channels.csv');
 
@@ -1330,9 +1248,7 @@ fprintf('Deliverables updated successfully:\n');
 fprintf('  -> Master Table (All Channels): %s\n', chan_pub_csv);
 fprintf('  -> Significant Channels (p < .05): %s (%d rows)\n', sig_chan_csv, height(sig_chan_tbl));
 
-%% -------------------------------------------------------------------------
-%% Inspect Channels Surviving Topographic FDR (q < .05)
-%% -------------------------------------------------------------------------
+% Inspect Channels Surviving Topographic FDR (q < .05)
 fdr_survivors = Table_RQ1_Channels_Pub(Table_RQ1_Channels_Pub.p_FDR < 0.05, :);
 fprintf('\n========================================================================================\n');
 fprintf('CHANNELS SURVIVING TOPOGRAPHIC FDR CORRECTION (q < .05): %d / %d\n', ...
@@ -1346,9 +1262,7 @@ else
                            'Beta_Std', 't', 'p', 'p_FDR', 'Brodmann_Area'}));
 end
 
-%% -------------------------------------------------------------------------
-%% 2. Process Track 2: ROI-Level Table
-%% -------------------------------------------------------------------------
+% 2. Process Track 2: ROI-Level Table
 fprintf('Formatting Track 2 ROI Publication Table...\n');
 
 n_roi_models = height(Table_RQ1_ROI);
@@ -1423,9 +1337,7 @@ Table_RQ1_ROI_Pub = table( ...
     } ...
 );
 
-%% -------------------------------------------------------------------------
-%% 3. Save Final CSV Files
-%% -------------------------------------------------------------------------
+% Save Final CSV Files
 chan_pub_csv = fullfile(group_out_dir, 'Table_RQ1_Publication_Channels.csv');
 roi_pub_csv  = fullfile(group_out_dir, 'Table_RQ1_Publication_ROI.csv');
 writetable(Table_RQ1_Channels_Pub, chan_pub_csv);
@@ -1433,9 +1345,7 @@ writetable(Table_RQ1_ROI_Pub, roi_pub_csv);
 
 fprintf('\nDeliverables exported successfully:\n  -> %s\n  -> %s\n', chan_pub_csv, roi_pub_csv);
 
-%% -------------------------------------------------------------------------
-%% 4. Print Summary Display of Significant Findings (p < .05)
-%% -------------------------------------------------------------------------
+% Print Summary Display of Significant Findings (p < .05)
 fprintf('\n========================================================================================\n');
 fprintf('TABLE: ROI-BASED COMPARISONS OF TEAM PERFORMANCE (CORRECT VS. DECOY)\n');
 fprintf('========================================================================================\n');
@@ -1458,9 +1368,8 @@ else
         {'Condition_Contrast', 'Chromophore', 'Channel', 'N_Participants', 'N_Dyads', ...
          'Beta_Raw', 'Beta_Std', 't', 'p', 'Brodmann_Area'}));
 end
-%% =========================================================================
-%% EXPORT SIGNIFICANT RQ1 EFFECTS TO DEDICATED DIRECTORY ('RQ_Sig')
-%% =========================================================================
+
+% EXPORT SIGNIFICANT RQ1 EFFECTS TO DEDICATED DIRECTORY ('RQ_Sig')
 fprintf('\n--- Exporting Significant RQ1 Tables to RQ_Sig Folder ---\n');
 
 % 1. Create target output directory
@@ -1491,28 +1400,12 @@ fprintf('Export complete:\n');
 fprintf('  -> Significant Channels (%d rows): %s\n', height(sig_chan_tbl), sig_chan_csv);
 fprintf('  -> Significant ROIs     (%d rows): %s\n', height(sig_roi_tbl), sig_roi_csv);
 
+%% Section G
 
+%  RQ2 - Individual Certainty Group LME Models (Step 9)
+%  Precision-Weighted w = 1 / SE^2; FitMethod = 'ML' for Model Selection
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-%% =========================================================================
-%  SECTION G: RQ2 - Individual Certainty Group LME Models (Step 9)
-%  [Precision-Weighted w = 1 / SE^2; FitMethod = 'ML' for Model Selection]
-%  =========================================================================
+% Command prompt
 fprintf('\n--- Section G: Evaluating RQ2 Certainty LME Models (Maximum Likelihood) ---\n');
 
 primary_baseline = 'TaskMatched';
@@ -1554,9 +1447,7 @@ roi_col_names_rq2 = { ...
     'AIC_M1_Signed', 'AIC_M2_Unsigned', 'AIC_M3_Dual', 'Delta_AIC_M2_M1', 'Delta_AIC_M3_M1' ...
 };
 
-%% -------------------------------------------------------------------------
-%% 9A. Track 1: Channel-Level Models for RQ2 (Optode Resolution)
-%% -------------------------------------------------------------------------
+% (9A) Track 1: Channel-Level Models for RQ2 (Optode Resolution)
 fprintf('Evaluating Track 1: Precision-weighted ML channel models across 41 channels and %d tasks...\n', ...
     length(rq2_tasks));
 
@@ -1595,18 +1486,21 @@ for c = 1:length(chroms)
             has_second = numel(categories(sub_tbl.Second_Dest_Dummy)) > 1;
             
             try
-                % Dynamic formulas to handle conditions with single Second_Dest level
+                % MEETING MODEL 2 RQ2 INDIVIDUAL PERFORMANCE
+                % Has second destination
                 if has_second
                     f1 = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
                     f2 = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
                     f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                % Does not have second destination
                 else
                     f1 = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
                     f2 = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
                     f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
                 end
-                
-                % Must fit via Maximum Likelihood ('ML') for AIC comparison across non-nested fixed effects
+
+                % All must fix for AIC comparisons
+                % Weights continue to be included
                 lme1 = fitlme(sub_tbl, f1, 'Weights', w_vec, 'FitMethod', 'ML');
                 lme2 = fitlme(sub_tbl, f2, 'Weights', w_vec, 'FitMethod', 'ML');
                 lme3 = fitlme(sub_tbl, f3, 'Weights', w_vec, 'FitMethod', 'ML');
@@ -1664,9 +1558,7 @@ else
 end
 fprintf('Track 1 RQ2 Channels complete: %d channel models evaluated.\n', height(Table_RQ2_Channels));
 
-%% -------------------------------------------------------------------------
-%% 9B. Track 2: ROI-Level Models for RQ2
-%% -------------------------------------------------------------------------
+% (9B) Track 2: ROI-Level Models for RQ2
 fprintf('Evaluating Track 2: Precision-weighted ML ROI models across %d ROIs, %d tasks, and %d chromophores...\n', ...
     length(rois), length(rq2_tasks), length(chroms));
 
