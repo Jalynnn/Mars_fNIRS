@@ -37,9 +37,7 @@ addpath('D:\GitHub\NIRS_SPM_v4_r1') % PC
 fprintf('\n--- Loading First Level Data ---\n')
 
 % Set paths through folder to .mat file from FirstLevel
-results_dir = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents\Preprocess';
-% firstLevel_file = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents\Preprocess\FirstLevel\FirstLevel_Cohort_Stats.mat';
-firstLevel_file = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents\FirstLevel\FirstLevel_Cohort_Stats.mat';
+firstLevel_file = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents\FirstLevel\FirstLevel_Cohort_Stats.mat'; % PC
 
 % Verify file exists
 if ~exist(firstLevel_file, 'file')
@@ -51,6 +49,7 @@ fprintf('Loading: %s ...\n', firstLevel_file);
 
 % Load the variables exported by FirstLevel.m:
 % SubjStats_HRF, SubjStats_FIR, Contrasts_HRF
+% Can refer to 'Output/FirstLevel/FirstLevel_Cohort_StatsDetailed.txt'
 load(firstLevel_file, 'SubjStats_HRF', 'SubjStats_FIR', 'Contrasts_HRF');
 
 % Verification summary in command window
@@ -73,115 +72,130 @@ fprintf('\n--- Loading Registered MNI Coordinates & Defining ROIs ---\n')
 % We can extract the channel midpoints and classify channels into the 4
 % ROIs based on their MNI space coordinates
 
+% Another script was introduced to do this called
+% 'Register_Montage_James_Pipeline' so most of this process takes place
+% there
 
+% However, the format is:
+% Calculate MNI Midpoint from registered Probe1020 via digpts.txt
+% Run nfri 10 mm search on XYZABLT.mat and anatomlabel_final.m
+% MNI Atlas Key Table to export table with columns: Channel, Source,
+% Detector, MNI, BA, Anatomy
+% Form ROIs from BAs (left pfc, left parietal, etc.)
+% Section C will do the group LME stats to fit on ROIs
 
+%% 3. Define ROIs
 
-
-
-
-
-
-
-
-
-
-% [41 Hardware Pairs (S-D)] 
-%          │
-%          ▼
-% [Step 3a: Calculate MNI Midpoints]  <-- From your registered Probe1020 / digpts.txt
-%          │
-%          ▼
-% [Step 3b: anatomlabel_final.m]     <-- Runs NFRI 10 mm spherical search on XYZABLT.mat
-%          │
-%          ▼
-% [Step 3c: MNI Atlas Key Table]      <-- Exports Table (Channel, S, D, MNI, BA, Anatomy)
-%          │
-%          ▼
-% [Step 3d: Form ROIs from BAs]       <-- L_PFC (BA9/46/10), L_PAR (BA7/39/40), etc.
-%          │
-%          ▼
-% [Section C: Group LME / Stats]      <-- Fit models on ROIs backed by anatomical labels
-
-%% =========================================================================
-%  SECTION B: Load Pre-Computed Group MNI Coordinates & Assign ROIs
-%  =========================================================================
-fprintf('\n--- Section B: Loading Registered MNI Coordinates & Defining ROIs ---\n');
-
-% Set and create GroupLevel directory
-project_root    = 'D:\GitHub\Mars_fNIRS';
-group_out_dir   = fullfile(project_root, 'Output', 'Pipeline_MergedEvents', 'GroupLevel'); % OVERWRITTEN
+% Set up export directory
+group_out_dir = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents\GroupLevel'; % PC
 if ~exist(group_out_dir, 'dir'), mkdir(group_out_dir); end
 
-%% 1. Define Channel Montage Configurations
-% Physical long channels mapped from Aurora montage (41 channels)
+%% 3a. Define Channel Montage Configurations
+
+% Physical long channels mapped from Aurora montage (41 LONG channels)
+% 49 total - 8 SSCs
 long_sd_pairs = [
-    1, 1;   1, 2;   1, 3;   2, 2;   2, 3;   2, 4;   3, 1;   3, 3;   4, 3;   4, 4;   % Frontal (L)
-    3, 10;  9, 1;   9, 9;   9, 10;  10, 9;  10, 10; 10, 11; 11, 10; 11, 11;         % Frontal (R)
-    5, 5;   5, 7;   6, 5;   6, 6;   7, 5;   7, 6;   7, 7;   7, 8;   8, 6;   8, 8;   % Parietal (L)
-    12, 12; 12, 13; 13, 13; 13, 14; 14, 12; 14, 13; 14, 14; 14, 15;                % Parietal (R)
-    15, 14; 15, 15; 16, 12; 16, 15                                                  % Parietal (R)
+    1, 1;   1, 2;   1, 3;   2, 2;   2, 3;   2, 4;   3, 1;   3, 3;   4, 3;   4, 4;
+    3, 10;  9, 1;   9, 9;   9, 10;  10, 9;  10, 10; 10, 11; 11, 10; 11, 11;
+    5, 5;   5, 7;   6, 5;   6, 6;   7, 5;   7, 6;   7, 7;   7, 8;   8, 6;   8, 8;
+    12, 12; 12, 13; 13, 13; 13, 14; 14, 12; 14, 13; 14, 14; 14, 15;
+    15, 14; 15, 15; 16, 12; 16, 15
 ];
+
 num_channels = size(long_sd_pairs, 1); % 41
 
-% 8 known short-separation pairs from NIRSport2 (to verify exclusion)
+% Part of identifying the 41 long channels is excluding the 8 SSCs which
+% were previously identified and available in the Output folder
 ssc_pairs = [
-    4, 16;  6, 17;  7, 18;  8, 19;
-    11, 20; 13, 21; 14, 22; 15, 23
+    4, 16;
+    6, 17;
+    7, 18;
+    8, 19;
+    11, 20;
+    13, 21;
+    14, 22;
+    15, 13
 ];
 
-%% 2. Load Pre-Computed Group Cortical MNI Coordinates
+%% 3b. Load Pre-Computed Group Cortical MNI Coordinates
+
 mni_avg_file = fullfile(group_out_dir, 'MNIs_Average.mat');
-% Fallback check in Derivatives if not yet moved
-if ~exist(mni_avg_file, 'file')
-    alt_file = fullfile(project_root, 'Output', 'Pipeline_MergedEvents', 'MNIs_Average.mat');
-    if exist(alt_file, 'file')
-        copyfile(alt_file, mni_avg_file);
-        fprintf('Copied MNIs_Average.mat into Output/Pipeline_MergedEvents/GroupLevel.\n');
-    else
-        error('Pre-computed MNI file missing at: %s', mni_avg_file);
-    end
-end
-load(mni_avg_file, 'MNIs_Mean'); % 41 x 3 cortical coordinates
+
+% 41 x 3 coords (X, Y, Z)
+load(mni_avg_file, 'MNIs_Mean');
+
+% Command window prompt
 fprintf('Loaded pre-computed group cortical MNI coordinates for %d channels.\n', size(MNIs_Mean, 1));
 
-%% 3. Assign 5 Functional ROIs Based on MNI Coordinates & Brodmann Areas
-% Text Specification:
+%% 3c. Assign 5 Functional ROIs Based on MNI Coordinates & Brodmann Areas
+
+% Method doc (added left/right parietal):
+% Uses the MNI midpoints, X = Left/Right, Y = Front/back, Z =
+% dorsal/ventral
 % - RPFC (BA 10): Rostral Prefrontal Cortex (medial frontopolar: Y >= 68 mm, Z <= 21 mm)
 % - L_DLPFC (BA 9/46): Left Dorsolateral Prefrontal Cortex (Y > 50 mm, X < 0)
 % - R_DLPFC (BA 9/46): Right Dorsolateral Prefrontal Cortex (Y > 50 mm, X > 0)
 % - L_Parietal (BA 7/40): Left Posterior Parietal Cortex (Y <= 50 mm, X < 0)
 % - R_Parietal (BA 7/40): Right Posterior Parietal Cortex (Y <= 50 mm, X > 0)
+
+% Pre-allocate a 41.x1 cell array to store ROI labels
 roi_assignments = cell(num_channels, 1);
+
+% Loop through each 41 channels
 for c = 1:num_channels
+
+    % Extract the group-averaged MNI coords for the current channel
     x_coord = MNIs_Mean(c, 1);
     y_coord = MNIs_Mean(c, 2);
     z_coord = MNIs_Mean(c, 3);
     
-    if y_coord > 50  % Prefrontal Cortex Montage (Channels 1-19)
+    % Prefrontal Cortex Montage (Channels 1-19)
+    % Anterior prefrontal channels
+    if y_coord > 50
+        
+        % Isolate frontopolar channels
+        % Frontal Pole / BA 10
         if y_coord >= 68 && z_coord <= 21
-            roi_assignments{c} = 'RPFC';      % Frontal Pole / BA 10
+            roi_assignments{c} = 'RPFC';
+
+        % Rest of prefrontal is left or right DLPFC
         else
+            % Left BA 9/46
             if x_coord < 0
-                roi_assignments{c} = 'L_DLPFC';  % Left BA 9/46
+                roi_assignments{c} = 'L_DLPFC';
+            % Right BA 9/46
             else
-                roi_assignments{c} = 'R_DLPFC';  % Right BA 9/46
+                roi_assignments{c} = 'R_DLPFC';
             end
         end
-    else             % Parietal Montage (Channels 20-41, BA 7/40)
+    % If not prefrontal, then parietal
+    % Parietal Montage (Channels 20-41, BA 7/40)
+    else
+        % Left BA 7/40 (Channels 20-29)
         if x_coord < 0
-            roi_assignments{c} = 'L_Parietal';   % Left BA 7/40 (Channels 20-29)
+            roi_assignments{c} = 'L_Parietal';
+        % Right BA 7/40 (Channels 30-41)
         else
-            roi_assignments{c} = 'R_Parietal';   % Right BA 7/40 (Channels 30-41)
+            roi_assignments{c} = 'R_Parietal';
         end
     end
 end
 
 % Assemble Master Atlas Table
-Master_Atlas_Table = table((1:num_channels)', long_sd_pairs(:,1), long_sd_pairs(:,2), ...
-    MNIs_Mean(:,1), MNIs_Mean(:,2), MNIs_Mean(:,3), roi_assignments, ...
-    'VariableNames', {'Channel', 'Source', 'Detector', 'MNI_X', 'MNI_Y', 'MNI_Z', 'ROI'});
+Master_Atlas_Table = table(...
+    (1:num_channels)', ... % Long channels
+    long_sd_pairs(:,1), ... % Sources
+    long_sd_pairs(:,2), ... % Detectors
+    MNIs_Mean(:,1), ... % X
+    MNIs_Mean(:,2), ... % Y
+    MNIs_Mean(:,3), ... % Z
+    roi_assignments, ... % Assigned ROI label
+    'VariableNames', {'Channel', 'Source', 'Detector', 'MNI_X', 'MNI_Y', 'MNI_Z', 'ROI'} ...
+);
 
-%% 4. Validation & Sanity Checks
+%% 3d. Validation & Sanity Checks
+
+% Confirm that there are exactly 41 long channels
 if height(Master_Atlas_Table) ~= 41
     warning('Expected exactly 41 long channels, but found %d!', height(Master_Atlas_Table));
 end
@@ -194,9 +208,18 @@ end
 
 % Verify all 5 method-specified ROIs are populated without empty groups
 roi_names = {'RPFC', 'L_DLPFC', 'R_DLPFC', 'L_Parietal', 'R_Parietal'};
+
+% Command window prompt
 fprintf('Assigned Channels across Method-Specified ROIs (5 ROIs):\n');
+
+% Goal is to loop through ROIs and flag empty ones
 for r = 1:length(roi_names)
+
+    % Count how many channels for each ROI
+    % Once printed, all values were confirmed with the montage image
     count = sum(strcmp(string(Master_Atlas_Table.ROI), roi_names{r}));
+
+    % Print warnings or num of channels per ROI
     if count == 0
         warning('ROI %s has 0 channels assigned!', roi_names{r});
     else
@@ -208,75 +231,81 @@ end
 atlas_key_file = fullfile(group_out_dir, 'Cortical_41Channels_MNI_Atlas_Key.csv');
 writetable(Master_Atlas_Table, atlas_key_file);
 save(fullfile(group_out_dir, 'Master_Atlas_Key.mat'), 'Master_Atlas_Table');
+
+% Command window update prompt
 fprintf('Master Atlas Key verified and saved to: %s\n', atlas_key_file);
 
+%% Section C
 
+% Fix the covariates and prep for models
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-% AI
-% Methods doc
-% " Age was mean-centered across participants; sex and the second-destination indicator were dummy-coded (0 = female, 1 = male; 0 = no second destination, 1 = second destination),"
-% 5
+% Methods doc quotes
+% "Age was mean-centered across participants; sex and the second-destination 
+% indicator were dummy-coded (0 = female, 1 = male; 0 = no second destination, 
+% 1 = second destination),"
 % "All second-level group models included participant age, sex, and a
-% binary indicator of whether the dyad visited a second destination as fixed-effect covariates."
-%% =========================================================================
-%  SECTION C: Participant Covariates & Predictor Preparation
-%  =========================================================================
-fprintf('\n--- Section C: Participant Demographics & Covariate Preparation ---\n');
+% binary indicator of whether the dyad visited a second destination as 
+% fixed-effect covariates."
 
-% Ensure unified group output directory is set
-if ~exist('group_out_dir', 'var')
-    project_root  = 'D:\GitHub\Mars_fNIRS';
-    group_out_dir = fullfile(project_root, 'Output', 'Pipeline_MergedEvents', 'GroupLevel');
-end
-if ~exist(group_out_dir, 'dir'), mkdir(group_out_dir); end
+% Command window update prompt
+fprintf('\n--- Participant Demographics & Covariate Preparation ---\n');
 
-%% Step 4. Harvest Individual Demographics & Metrics from SubjStats
+%% 4. Extract Individual Demographics & Metrics from SubjStats
+
+% Num ptps from first level HRF cohort array (recall firstLevel .txt)
 num_ptps = length(SubjStats_HRF);
 
 % Initialize metadata containers
-ptp_id           = zeros(num_ptps, 1);
-session_id       = cell(num_ptps, 1);
-age_raw          = nan(num_ptps, 1);
-gender_raw       = cell(num_ptps, 1);
-team_perf_raw    = nan(num_ptps, 1);
-intended_both    = nan(num_ptps, 1);
-exec_cert_final  = nan(num_ptps, 1);
-exec_cert_signed = nan(num_ptps, 1);
-exec_cert_time   = nan(num_ptps, 1);
+% Pre-allocates all to 59x1 arrays to avoid dynamic resizing in upcoming
+% loops
+ptp_id = zeros(num_ptps, 1); % Ptp ID
+session_id = cell(num_ptps, 1); % Dyad ID
+age_raw = nan(num_ptps, 1); % Ptp age in years
+gender_raw = cell(num_ptps, 1); % Gender 0,1,2
+team_perf_raw = nan(num_ptps, 1); % Team Performance 0 or 1
+intended_both = nan(num_ptps, 1); % Indicator of second destination
+exec_cert_final = nan(num_ptps, 1); % Unsigned individual certainty
+exec_cert_signed = nan(num_ptps, 1); % Signed individual certainty
+exec_cert_time = nan(num_ptps, 1); % Elapsed decision time (s)
 
-% Optional fallback load from CSV if demographics dictionary lacks new fields
+% Fallback load from CSV if demographics dictionary lacks new fields
+% This section does get used
+% SubjStats has 0/59 for both final signed and popup elapsed
 demo_csv_file = 'D:\GitHub\Mars_fNIRS\Data\Demographics\fnirs_demographics_spyV4.csv';
-demo_csv_tbl  = [];
+demo_csv_tbl = [];
 if exist(demo_csv_file, 'file')
     demo_csv_tbl = readtable(demo_csv_file);
 end
 
+% Loop through each ptp to extract demographic and behavioral outcomes
 for i = 1:num_ptps
+
+    % Extracts current ptp demographics
     d = SubjStats_HRF(i).demographics;
     
     % Use d.iskey (lowercase 'k') or ismember(..., d.keys) for nirs.util.Dictionary
+    % Extract individual identifiers
     if d.iskey('participant_id'), ptp_id(i) = d('participant_id'); else, ptp_id(i) = i; end
-    if d.iskey('session_id'),     session_id{i} = char(string(d('session_id'))); else, session_id{i} = sprintf('dyad_%02d', ceil(i/2)); end
-    if d.iskey('age'),            age_raw(i) = d('age'); end
-    if d.iskey('gender'),         gender_raw{i} = char(string(d('gender'))); end
+    if d.iskey('session_id'), session_id{i} = char(string(d('session_id'))); else, session_id{i} = sprintf('dyad_%02d', ceil(i/2)); end
+    if d.iskey('age'), age_raw(i) = d('age'); end
+    if d.iskey('gender'), gender_raw{i} = char(string(d('gender'))); end
     if d.iskey('team_performance'), team_perf_raw(i) = d('team_performance'); end
-    if d.iskey('intended_both'),  intended_both(i) = d('intended_both'); end
+    if d.iskey('intended_both'), intended_both(i) = d('intended_both'); end
     if d.iskey('exec_cert_final'), exec_cert_final(i) = d('exec_cert_final'); end
+
+    % The following subsection only looks at signed certainty and decision
+    % time
+    % this is because in Preprocess.m, the Hb_preprocessed_cohort.mat did
+    % not include these two - rather they were added later because
+    % FirstLevel.m takes over an hour to re-run, the CSV fallback was
+    % written. 
+    % At this point during cleaning, I considered returning to preprocess
+    % and FirstLevel to add these components but it costs more effort than
+    % it is likely worth than just keeping the CSV fallback available in
+    % this section. Happy to revisit on request.
     
-    % RQ2: Harvest Signed Certainty (SC) and Elapsed Time
+    % RQ2 Primary Predictor with Signed Certainty using csv for ptp id
+    % lookup
     if d.iskey('exec_cert_final_signed')
         exec_cert_signed(i) = d('exec_cert_final_signed');
     elseif ~isempty(demo_csv_tbl)
@@ -284,6 +313,7 @@ for i = 1:num_ptps
         if ~isempty(idx), exec_cert_signed(i) = demo_csv_tbl.exec_cert_final_signed(idx); end
     end
     
+    % RQ2 Covariate Elapsed Decision time using csv for ptp id lookup
     if d.iskey('exec_cert_final_popup_elapsed_s')
         exec_cert_time(i) = d('exec_cert_final_popup_elapsed_s');
     elseif ~isempty(demo_csv_tbl)
@@ -292,76 +322,94 @@ for i = 1:num_ptps
     end
 end
 
-%% Step 5. Predictor Centering & Categorical Coding
-% -------------------------------------------------------------------------
-% 1. Continuous Covariate: Age (Mean-Centered)
-% -------------------------------------------------------------------------
+%% 5. Predictor Centering & Categorical Coding
+
+%% 5a. Continuous Covariate: Age (Mean-Centered)
+
+% Compute cohort average age ignoring missing values
+% omitnan as in Omit NAN not Omniman :) 
 mean_age = mean(age_raw, 'omitnan');
 age_centered = age_raw - mean_age;
+
+% Log the age range and mean to command window
 fprintf('Age centered around cohort mean: %.2f years (range: %d - %d).\n', ...
     mean_age, min(age_raw), max(age_raw));
 
-% -------------------------------------------------------------------------
-% 2. Categorical Covariate: Gender / Biosex
-% Coding: 1 = Female (ref), 2 = Male, 3/4 = Other
-% -------------------------------------------------------------------------
+%% 5b. Categorical Covariate: Gender / Biosex
+
+% Coding: 0 = Female (ref), 1 = Male, 2 = Other
+% Pre-allocate string labels and reference codes
 gender_labels = strings(num_ptps, 1);
-gender_dummy  = zeros(num_ptps, 1); % Numeric reference: 0 = Female, 1 = Male, 2 = Other
+gender_dummy = zeros(num_ptps, 1);
+
+% For each ptp, normalize demo gender code to standard categories
 for i = 1:num_ptps
+    % Extract gender as lower case
     g_str = lower(strtrim(gender_raw{i}));
+
+    % Female
     if strcmp(g_str, '1') || startsWith(g_str, 'f')
         gender_labels(i) = "Female";
-        gender_dummy(i)  = 0;
+        gender_dummy(i) = 0;
+
+    % Male
     elseif strcmp(g_str, '2') || startsWith(g_str, 'm')
         gender_labels(i) = "Male";
-        gender_dummy(i)  = 1;
+        gender_dummy(i) = 1;
+    
+    % Other
     else
         gender_labels(i) = "Other";
-        gender_dummy(i)  = 2;
+        gender_dummy(i) = 2;
     end
 end
-% Cast to categorical with Female explicitly declared first as reference
+
+% Cast to categorical with female explicitly declared first as reference
 gender_cat = categorical(gender_labels, {'Female', 'Male', 'Other'});
 
-% -------------------------------------------------------------------------
-% 3. Task Outcome: Team Performance (Dummy Coded: 1 = Correct/True, 0 = Decoy)
-% -------------------------------------------------------------------------
-if all(ismember(team_perf_raw(~isnan(team_perf_raw)), [0, 1]))
-    team_perf_dummy = team_perf_raw;
-else
-    team_perf_dummy = double(team_perf_raw > median(team_perf_raw, 'omitnan'));
+%% 5c. RQ1 Team Performance
+
+% Ensure binary dummy coding: 1 = Correct/True, 0 = Decoy
+if ~all(ismember(team_perf_raw(~isnan(team_perf_raw)), [0, 1]))
+    error('Unexpected values in team_performance; expected binary 0/1 coding.');
 end
 
-% -------------------------------------------------------------------------
-% 4. Behavioral Metrics: Certainty (Unsigned C & Signed SC) & Elapsed Time
-% -------------------------------------------------------------------------
-% Unsigned Certainty (C)
-mean_cert     = mean(exec_cert_final, 'omitnan');
+% Stored as double with strict binary [0,1] values
+team_perf_dummy = team_perf_raw;
+
+%% 5d. RQ2 Predictors and Covariates
+
+% Unsigned Certainty (C) cohort mean centered
+mean_cert = mean(exec_cert_final, 'omitnan');
 cert_centered = exec_cert_final - mean_cert;
 
-% Signed Certainty (SC)
-mean_sc     = mean(exec_cert_signed, 'omitnan');
+% Signed Certainty (SC) cohort mean centered
+mean_sc = mean(exec_cert_signed, 'omitnan');
 sc_centered = exec_cert_signed - mean_sc;
 
-% Elapsed Time (Time)
-mean_time     = mean(exec_cert_time, 'omitnan');
+% Elapsed Time (Time) cohort mean centered
+mean_time = mean(exec_cert_time, 'omitnan');
 time_centered = exec_cert_time - mean_time;
 
+% Command window updates for centering summaries for RQ2
 fprintf('RQ2 Predictors Centered around Cohort Means:\n');
 fprintf('  -> Unsigned Certainty (C):  mean = %.2f (range: %d - %d)\n', mean_cert, min(exec_cert_final), max(exec_cert_final));
 fprintf('  -> Signed Certainty (SC):   mean = %.2f (range: %d - %d)\n', mean_sc, min(exec_cert_signed), max(exec_cert_signed));
 fprintf('  -> Elapsed Time (s):        mean = %.2f (range: %d - %d)\n', mean_time, min(exec_cert_time), max(exec_cert_time));
 
-% -------------------------------------------------------------------------
-% 5. Second Destination Covariate (Second[d])
-% -------------------------------------------------------------------------
+%% 5e. Dyadic Covariate & Second Destination
+
+% Code based on whether the dyad visited a second site
+% 1 Yes; 0 No
 if all(isnan(intended_both))
     second_dest_dummy = zeros(num_ptps, 1);
 else
     second_dest_dummy = double(intended_both == 1);
 end
 
-% Assemble Final Participant Covariates Table
+%% 5f. Assemble Final Participant Covariates Table
+
+% Combine all raw and centered variables into a master 59 ptp table
 Cohort_Covariates = table(ptp_id, session_id, age_raw, age_centered, ...
     gender_cat, gender_dummy, team_perf_raw, team_perf_dummy, ...
     exec_cert_final, cert_centered, ...
@@ -375,7 +423,7 @@ Cohort_Covariates = table(ptp_id, session_id, age_raw, age_centered, ...
                       'Elapsed_Time', 'Time_Centered', ...
                       'Intended_Both'});
 
-% Display overview
+% Preview the first 8 rows of the table in the command window
 fprintf('Cohort Covariate Table created for %d participants:\n', height(Cohort_Covariates));
 disp(Cohort_Covariates(1:min(8, height(Cohort_Covariates)), :));
 
@@ -384,75 +432,51 @@ save_cov_file = fullfile(group_out_dir, 'Cohort_Covariates_Table.csv');
 writetable(Cohort_Covariates, save_cov_file);
 fprintf('Saved Covariate Table to: %s\n', save_cov_file);
 
+%% Section D: Setup Long Table CSVs for both Channel & ROIs
 
+% Command window update prompt
+fprintf('\n--- Constructing Track 1 (Channels) & Track 2 (ROIs) ---\n');
 
+%% 6a. Map Second-Destination Indicator for Track Construction
 
+% Map Intended_Both from Section C into Second_Dest_Dummy for downstream LME formulas
+Cohort_Covariates.Second_Dest_Dummy = double(Cohort_Covariates.Intended_Both == 1);
 
+%% 6b. Track 1: Channel-Wise Long Table Construction (HbO & HbR)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-% AI
-%% =========================================================================
-%  SECTION D: Setup Two Tracks for Group-Level Analysis (w/ HbDiff)
-%  =========================================================================
-fprintf('\n--- Section D: Constructing Track 1 (Channels) & Track 2 (ROIs) ---\n');
-
-%% Step 6. Setup Two Tracks for Group-Level Analysis
-if ~exist('group_out_dir', 'var')
-    group_out_dir = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents\GroupLevel';
-end
-if ~exist(group_out_dir, 'dir'), mkdir(group_out_dir); end
-
-% Load pre-computed Master Atlas Key and Cohort Covariates
-if ~exist('Master_Atlas_Table', 'var')
-    load(fullfile(group_out_dir, 'Master_Atlas_Key.mat'), 'Master_Atlas_Table');
-end
-if ~exist('Cohort_Covariates', 'var')
-    Cohort_Covariates = readtable(fullfile(group_out_dir, 'Cohort_Covariates_Table.csv'));
-end
-
-% Ensure Second_Dest_Dummy exists in Cohort_Covariates
-if ~ismember('Second_Dest_Dummy', Cohort_Covariates.Properties.VariableNames)
-    if ismember('Intended_Both', Cohort_Covariates.Properties.VariableNames)
-        Cohort_Covariates.Second_Dest_Dummy = double(Cohort_Covariates.Intended_Both == 1);
-    else
-        Cohort_Covariates.Second_Dest_Dummy = zeros(height(Cohort_Covariates), 1);
-    end
-end
-
-contrast_types = {'TaskMatched', 'Fixation'};
-track1_cell = {};
-
-%% -------------------------------------------------------------------------
-%% 6A. Track 1: Channel-Wise Long Table Construction (HbO & HbR)
-%% -------------------------------------------------------------------------
+% Command window update prompt
 fprintf('Building Track 1: Channel-level long table...\n');
 
+% The two baseline options
+contrast_types = {'TaskMatched', 'Fixation'};
+
+% The select tasks that are transient/events and not sustained/blocks
+transient_tasks = {'status_check', 'spam_pop_up', 'tricorder_switch', ...
+                   'certainty_individual', 'certainty_consensus'};
+
+% Empty cell array for per ptp, per task sub-tables
+track1_cell = {};
+
+% Loop through each of the baselines
 for ct = 1:length(contrast_types)
+
+    % Extract the current baseline
     c_type = contrast_types{ct};
+
+    % If missing struct in baseline
     if ~isfield(Contrasts_HRF, c_type), continue; end
     
+    % Retrieve task contrast field names for this baseline set
     task_names = fieldnames(Contrasts_HRF.(c_type));
     
+    % Lop through each task in this baseline
     for tn = 1:length(task_names)
+
+        % Extract the current task
         task_name = task_names{tn};
         
-        transient_tasks = {'status_check', 'spam_pop_up', 'tricorder_switch', ...
-                   'certainty_individual', 'certainty_consensus'};
+        % If this task is transient of sustained
+        % Provide numeric indicator
         if ismember(lower(task_name), transient_tasks)
             timescale_name = "Transient";
             timescale_num  = 1;
@@ -461,10 +485,16 @@ for ct = 1:length(contrast_types)
             timescale_num  = 0;
         end
         
+        % Extract the 1x~59 arrays for this task
         cs_array = Contrasts_HRF.(c_type).(task_name);
-        n_ptps   = min(height(Cohort_Covariates), length(cs_array));
+
+        % N ptps for upcoming loop for this task
+        n_ptps = min(height(Cohort_Covariates), length(cs_array));
         
+        % Loop three through each ptp for this task in this baseline
         for p = 1:n_ptps
+
+            % Extract channelStat obj for this ptp
             cs = cs_array(p);
             
             % Safe table retrieval
@@ -480,58 +510,64 @@ for ct = 1:length(contrast_types)
             end
             
             % Normalize column types for inner join
-            t_data.source   = double(t_data.source);
+            t_data.source = double(t_data.source);
             t_data.detector = double(t_data.detector);
-            t_data.type     = upper(string(t_data.type));
+            t_data.type = upper(string(t_data.type));
             
             % Inner join on (source, detector) with Master_Atlas_Table
             % Drops the 8 SSCs and keeps only the 41 valid long cortical channels
+            % Drops 8 SSCs retains surviving 41 long channels
+            % Includes channel index 1 - 41 and mni coords
             t_merged = innerjoin(t_data, Master_Atlas_Table, ...
                 'LeftKeys', {'source', 'detector'}, ...
                 'RightKeys', {'Source', 'Detector'});
             
+            % Skip if all cortical channels for the ptp/task were pruned
             if isempty(t_merged) || height(t_merged) == 0, continue; end
             
+            % Num of surviving long channels for this ptp/task
             n_rows = height(t_merged);
             
             % Subject covariates from Section C (RQ1 + RQ2)
-            sub_id   = Cohort_Covariates.Participant_ID(p);
-            sess_id  = string(Cohort_Covariates.Session_ID(p));
-            age_c    = Cohort_Covariates.Age_Centered(p);
-            g_dum    = double(Cohort_Covariates.Gender_Dummy(p));
-            t_perf   = Cohort_Covariates.Team_Perf_Dummy(p);
-            cert_c   = Cohort_Covariates.Certainty_Centered(p);
-            sc_c     = Cohort_Covariates.SC_Centered(p);
-            time_c   = Cohort_Covariates.Time_Centered(p);
-            sec_dest = double(Cohort_Covariates.Second_Dest_Dummy(p));
+            % Extracts ptp demographics, behavioral, and covariates
+            % Replicate across all cahnnel rows for mixed-effects
+            sub_id = Cohort_Covariates.Participant_ID(p); % Ptp id
+            sess_id = string(Cohort_Covariates.Session_ID(p)); % Dyad id
+            age_c = Cohort_Covariates.Age_Centered(p); % age in years mean centered
+            g_dum = double(Cohort_Covariates.Gender_Dummy(p)); % numeric gender assigned
+            t_perf = Cohort_Covariates.Team_Perf_Dummy(p); % team performance true or decoy 1 or 0
+            cert_c = Cohort_Covariates.Certainty_Centered(p); % mean centered unsigned certainty indiv
+            sc_c = Cohort_Covariates.SC_Centered(p); % mean centered signed certainty indiv
+            time_c = Cohort_Covariates.Time_Centered(p); % mean centered time elapsed in pop up spam
+            sec_dest = double(Cohort_Covariates.Second_Dest_Dummy(p)); % binary whether second dest site
             
             % Assemble block table for this subject & condition (25 columns)
             block_tbl = table( ...
-                repmat(sub_id, n_rows, 1), ...
-                repmat(sess_id, n_rows, 1), ...
-                repmat(string(c_type), n_rows, 1), ...
-                repmat(string(task_name), n_rows, 1), ...
-                repmat(timescale_name, n_rows, 1), ...
-                repmat(timescale_num, n_rows, 1), ...
-                t_merged.type, ...
-                t_merged.Channel, ...
-                t_merged.source, ...
-                t_merged.detector, ...
-                string(t_merged.ROI), ...
-                t_merged.MNI_X, ...
-                t_merged.MNI_Y, ...
-                t_merged.MNI_Z, ...
-                t_merged.beta, ...
-                t_merged.se, ...
-                t_merged.tstat, ...
-                t_merged.p, ...
-                repmat(age_c, n_rows, 1), ...
-                repmat(g_dum, n_rows, 1), ...
-                repmat(t_perf, n_rows, 1), ...
-                repmat(cert_c, n_rows, 1), ...
-                repmat(sc_c, n_rows, 1), ...
-                repmat(time_c, n_rows, 1), ...
-                repmat(sec_dest, n_rows, 1), ...
+                repmat(sub_id, n_rows, 1), ... % ptp id
+                repmat(sess_id, n_rows, 1), ... % dyad id
+                repmat(string(c_type), n_rows, 1), ... % baseline type fixed or task matched for the outer loop
+                repmat(string(task_name), n_rows, 1), ... % time contrast name for middle loop
+                repmat(timescale_name, n_rows, 1), ... % Transient or sustained current event
+                repmat(timescale_num, n_rows, 1), ... % Timescale num matching transient or sustained
+                t_merged.type, ... % chromophore HbO or HbR (HbDiff calculated soon)
+                t_merged.Channel, ... % cortical channel index 1-41
+                t_merged.source, ... % Source index
+                t_merged.detector, ... % detector idx
+                string(t_merged.ROI), ... % ROI label
+                t_merged.MNI_X, ... % X
+                t_merged.MNI_Y, ... % Y
+                t_merged.MNI_Z, ... % Z
+                t_merged.beta, ... % raw beta first level GLM contrast
+                t_merged.se, ... % first level standard error
+                t_merged.tstat, ... % first level t-stat
+                t_merged.p, ... % first level p-val
+                repmat(age_c, n_rows, 1), ... % age centered covariate
+                repmat(g_dum, n_rows, 1), ... % gender covariate
+                repmat(t_perf, n_rows, 1), ... % team performance 
+                repmat(cert_c, n_rows, 1), ... % unsigned certainty
+                repmat(sc_c, n_rows, 1), ... % signed certainty
+                repmat(time_c, n_rows, 1), ... % spam pop up centered time
+                repmat(sec_dest, n_rows, 1), ... % second destination covariate
                 'VariableNames', { ...
                     'Participant_ID', 'Session_ID', 'Baseline_Type', 'Task_Contrast', ...
                     'Timescale', 'Timescale_Num', 'Chromophore', 'Channel', 'Source', 'Detector', ...
@@ -541,60 +577,67 @@ for ct = 1:length(contrast_types)
                 } ...
             );
             
+            % append this ptp / task to the cell outside loops
             track1_cell{end+1} = block_tbl;
         end
     end
 end
 
+% Exit with error if no valid rows
 if isempty(track1_cell)
     error('Track 1 yielded 0 valid rows across all conditions.');
 end
+
+% Concat all ptp / tasks into master track one table
 Track1_Channel_Long_Table = vertcat(track1_cell{:});
 
-%% -------------------------------------------------------------------------
-%% 6A.1 Exact Vectorized HbDiff Calculation (Track 1)
-%% -------------------------------------------------------------------------
+%% 6c. Compute Differential Hemodynamic Response: HbDiff = HbO - HbR (Track 1)
+
+% Command window update
 fprintf('Computing exact HbDiff (HbO - HbR) for Track 1 Channels...\n');
 
+% Locate rows corresponding to HbO or HbR
 idx_hbo = find(Track1_Channel_Long_Table.Chromophore == "HBO");
 idx_hbr = find(Track1_Channel_Long_Table.Chromophore == "HBR");
 
-% Verify 1-to-1 alignment across rows
+% Enforce 1-1 row alignment between HbO and HbR before vector subtraction
+% for HbDiff
 assert(isequal(Track1_Channel_Long_Table.Channel(idx_hbo), Track1_Channel_Long_Table.Channel(idx_hbr)), ...
     'Mismatch in channel alignment between HBO and HBR!');
 assert(isequal(Track1_Channel_Long_Table.Participant_ID(idx_hbo), Track1_Channel_Long_Table.Participant_ID(idx_hbr)), ...
     'Mismatch in participant alignment between HBO and HBR!');
 
 % Exact differential formulas
+% Beta_HbO - Beta_HbR
 diff_beta = Track1_Channel_Long_Table.Beta(idx_hbo) - Track1_Channel_Long_Table.Beta(idx_hbr);
-diff_se   = sqrt(Track1_Channel_Long_Table.SE(idx_hbo).^2 + Track1_Channel_Long_Table.SE(idx_hbr).^2);
-diff_t    = diff_beta ./ diff_se;
-diff_p    = 2 * (1 - normcdf(abs(diff_t)));
+% sqrt(SE_HbO^2 + SE_HbR^2) under standard error propagation
+diff_se = sqrt(Track1_Channel_Long_Table.SE(idx_hbo).^2 + Track1_Channel_Long_Table.SE(idx_hbr).^2);
+% Beta_diff / SE_diff
+diff_t = diff_beta ./ diff_se;
+% two tailed normal approx p-val
+diff_p = 2 * (1 - normcdf(abs(diff_t)));
 
-% Construct Track 1 HbDiff slice
+% Construct Track 1 HbDiff slice via HbO clone
 t1_diff = Track1_Channel_Long_Table(idx_hbo, :);
-
-if iscategorical(Track1_Channel_Long_Table.Chromophore)
-    Track1_Channel_Long_Table.Chromophore = addcats(Track1_Channel_Long_Table.Chromophore, 'HBDIFF');
-    t1_diff.Chromophore = categorical(repmat({'HBDIFF'}, height(t1_diff), 1));
-else
-    t1_diff.Chromophore = repmat("HBDIFF", height(t1_diff), 1);
-end
-
+t1_diff.Chromophore = repmat("HBDIFF", height(t1_diff), 1);
 t1_diff.Beta   = diff_beta;
 t1_diff.SE     = diff_se;
 t1_diff.T_Stat = diff_t;
 t1_diff.P_Val  = diff_p;
 
-% Recombine
+% Append HbDiff to HbO and HbR so track one contains all three
 Track1_Channel_Long_Table = [Track1_Channel_Long_Table; t1_diff];
+
+% Command window update
 fprintf('Track 1 Long Table finalized: %d rows.\n', height(Track1_Channel_Long_Table));
 
-%% -------------------------------------------------------------------------
-%% 6B. Track 2: ROI-Averaged Long Table Construction (w/ HbDiff)
-%% -------------------------------------------------------------------------
+%% 6d. Track 2: Aggregate Channel Estimates into 5 Functional ROIs
+
+% Command window update
 fprintf('Building Track 2: ROI-averaged long table...\n');
 
+% Partition track one rows into unqiue ptp x dyad id x baseline x task x
+% timescale x chrome x ROI
 [roi_groups, grp_p_id, grp_s_id, grp_base, grp_task, grp_tscale, grp_tnum, grp_chrom, grp_roi] = findgroups( ...
     Track1_Channel_Long_Table.Participant_ID, ...
     Track1_Channel_Long_Table.Session_ID, ...
@@ -606,14 +649,19 @@ fprintf('Building Track 2: ROI-averaged long table...\n');
     Track1_Channel_Long_Table.ROI ...
 );
 
+% Calculate average beta, se, t-test across all survivng long channels for
+% each ROI
+% Record how many valid channels contributed to each ptp ROI estimate
 mean_beta = splitapply(@(x) mean(x, 'omitnan'), Track1_Channel_Long_Table.Beta, roi_groups);
-mean_se   = splitapply(@(x) mean(x, 'omitnan'), Track1_Channel_Long_Table.SE, roi_groups);
-mean_t    = splitapply(@(x) mean(x, 'omitnan'), Track1_Channel_Long_Table.T_Stat, roi_groups);
-chan_cnt  = splitapply(@(x) sum(~isnan(x)), Track1_Channel_Long_Table.Beta, roi_groups);
+mean_se = splitapply(@(x) mean(x, 'omitnan'), Track1_Channel_Long_Table.SE, roi_groups);
+mean_t = splitapply(@(x) mean(x, 'omitnan'), Track1_Channel_Long_Table.T_Stat, roi_groups);
+chan_cnt = splitapply(@(x) sum(~isnan(x)), Track1_Channel_Long_Table.Beta, roi_groups);
 
-% Map participant-level covariates matching by Participant_ID
+% Map participant-level covariates matching by Participant_ID to re-attach
+% subj-level predictors
 [~, cov_idx] = ismember(double(grp_p_id), double(Cohort_Covariates.Participant_ID));
 
+% Creates the 19 column ROI averaged long table for group level LME
 Track2_ROI_Long_Table = table( ...
     grp_p_id, grp_s_id, grp_base, grp_task, grp_tscale, grp_tnum, grp_chrom, grp_roi, ...
     chan_cnt, mean_beta, mean_se, mean_t, ...
@@ -634,215 +682,318 @@ Track2_ROI_Long_Table = table( ...
     } ...
 );
 
+% Command window update for length of rows and cols
 fprintf('Track 2 Long Table generated (HBO, HBR, HBDIFF): %d rows x %d columns.\n', ...
     height(Track2_ROI_Long_Table), width(Track2_ROI_Long_Table));
 
-%% -------------------------------------------------------------------------
-%% 6C. Cast Grouping Factors & Categorical Predictors
-%% -------------------------------------------------------------------------
+%% 6e. Cast Factors to Categorical & Export Track Deliverables
+
+% Command window update
 fprintf('Casting grouping and model factors to categorical...\n');
 
-% Format Gender_Dummy as categorical with Female (0) as reference
-Track1_Channel_Long_Table.Gender_Dummy = categorical(double(Track1_Channel_Long_Table.Gender_Dummy), [0, 1, 2], {'Female', 'Male', 'Other'});
-Track2_ROI_Long_Table.Gender_Dummy     = categorical(double(Track2_ROI_Long_Table.Gender_Dummy), [0, 1, 2], {'Female', 'Male', 'Other'});
-
-% Format Second_Dest_Dummy as categorical with NoSecond (0) as reference
+% Explicitly set reference levels for dummy-coded categorical predictors (Female = ref, NoSecond = ref)
+% Convert numeric dummy to categorical; gender has 0,1,2 and
+% seconddestdummy has 0 and 1
+Track1_Channel_Long_Table.Gender_Dummy      = categorical(double(Track1_Channel_Long_Table.Gender_Dummy), [0, 1, 2], {'Female', 'Male', 'Other'});
+Track2_ROI_Long_Table.Gender_Dummy          = categorical(double(Track2_ROI_Long_Table.Gender_Dummy), [0, 1, 2], {'Female', 'Male', 'Other'});
 Track1_Channel_Long_Table.Second_Dest_Dummy = categorical(double(Track1_Channel_Long_Table.Second_Dest_Dummy), [0, 1], {'NoSecond', 'Second'});
 Track2_ROI_Long_Table.Second_Dest_Dummy     = categorical(double(Track2_ROI_Long_Table.Second_Dest_Dummy), [0, 1], {'NoSecond', 'Second'});
 
-% Format structural factors in Track 1
-Track1_Channel_Long_Table.Session_ID     = categorical(string(Track1_Channel_Long_Table.Session_ID));
-Track1_Channel_Long_Table.Participant_ID = categorical(Track1_Channel_Long_Table.Participant_ID);
-Track1_Channel_Long_Table.ROI            = categorical(Track1_Channel_Long_Table.ROI);
-Track1_Channel_Long_Table.Chromophore    = categorical(Track1_Channel_Long_Table.Chromophore);
-Track1_Channel_Long_Table.Timescale      = categorical(Track1_Channel_Long_Table.Timescale);
-Track1_Channel_Long_Table.Baseline_Type  = categorical(Track1_Channel_Long_Table.Baseline_Type);
-Track1_Channel_Long_Table.Task_Contrast  = categorical(Track1_Channel_Long_Table.Task_Contrast);
+% Cast shared structural grouping columns to categorical across both tables
+% Loops instead of initial direct contrast comparison
+% Converts remining structual grouping to categorical
+% fitlme wil treat session id as random-effect grouping factor
+cat_cols = {'Session_ID', 'Participant_ID', 'ROI', 'Chromophore', 'Timescale', 'Baseline_Type', 'Task_Contrast'};
+for k = 1:length(cat_cols)
+    col = cat_cols{k};
+    Track1_Channel_Long_Table.(col) = categorical(string(Track1_Channel_Long_Table.(col)));
+    Track2_ROI_Long_Table.(col) = categorical(string(Track2_ROI_Long_Table.(col)));
+end
 
-% Format structural factors in Track 2
-Track2_ROI_Long_Table.Session_ID         = categorical(string(Track2_ROI_Long_Table.Session_ID));
-Track2_ROI_Long_Table.Participant_ID     = categorical(Track2_ROI_Long_Table.Participant_ID);
-Track2_ROI_Long_Table.ROI                = categorical(Track2_ROI_Long_Table.ROI);
-Track2_ROI_Long_Table.Chromophore        = categorical(Track2_ROI_Long_Table.Chromophore);
-Track2_ROI_Long_Table.Timescale          = categorical(Track2_ROI_Long_Table.Timescale);
-Track2_ROI_Long_Table.Baseline_Type      = categorical(Track2_ROI_Long_Table.Baseline_Type);
-Track2_ROI_Long_Table.Task_Contrast      = categorical(Track2_ROI_Long_Table.Task_Contrast);
-
-%% -------------------------------------------------------------------------
-%% 6D. Export Deliverables to Mars_fNIRS\Output\GroupLevel
-%% -------------------------------------------------------------------------
-track1_file     = fullfile(group_out_dir, 'Track1_Channel_Long_Table.csv');
-track2_file     = fullfile(group_out_dir, 'Track2_ROI_Long_Table.csv');
+% Export Deliverables to Mars_fNIRS\Output\Pipeline_MergedEvents\GroupLevel
+% Define output file paths
+track1_file = fullfile(group_out_dir, 'Track1_Channel_Long_Table.csv');
+track2_file = fullfile(group_out_dir, 'Track2_ROI_Long_Table.csv');
 save_tracks_mat = fullfile(group_out_dir, 'GroupLevel_Tracks_Data.mat');
 
+% Write both long tables to CSVs
 writetable(Track1_Channel_Long_Table, track1_file);
 writetable(Track2_ROI_Long_Table, track2_file);
 save(save_tracks_mat, 'Track1_Channel_Long_Table', 'Track2_ROI_Long_Table');
 
+% Confirm export complete and list file directory in command window
 fprintf('Section D complete. Saved track files to:\n  -> %s\n  -> %s\n  -> %s\n', ...
     track1_file, track2_file, save_tracks_mat);
 
+%% Section E: Manipulation Check with Baseline Contrasts
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-%% =========================================================================
-%  SECTION E: LME Manipulation Checks (Validation) & FIR Inspection
-%  =========================================================================
-
-fprintf('\n--- Section E: Running Validation LME Models (Step 7) ---\n');
+% Command window update prompt
+fprintf('\n--- Running Validation LME Models ---\n');
 
 % Set primary baseline filter to TaskMatched
+% Task match is used for baseline contrasts
 primary_baseline = 'TaskMatched';
 
+% Initlaize cells for tables like in Section D
+% One for track 1 (Channels) and the other for track 2 (ROIs)
 validation_chan_rows = {};
 validation_roi_rows  = {};
 
-chroms   = categories(Track1_Channel_Long_Table.Chromophore);
-tasks    = categories(Track1_Channel_Long_Table.Task_Contrast);
-channels = unique(Track1_Channel_Long_Table.Channel);
-rois     = categories(Track2_ROI_Long_Table.ROI);
+% Extract the unique categorical factor levels from track one and two
+chroms = categories(Track1_Channel_Long_Table.Chromophore); % HbDiff, HbO, HbR
+tasks = categories(Track1_Channel_Long_Table.Task_Contrast); % All tasks
+channels = unique(Track1_Channel_Long_Table.Channel); % All cortical coords
+rois = categories(Track2_ROI_Long_Table.ROI); % All 5 ROIs
 
-%% -------------------------------------------------------------------------
-%% 7A. Track 1: Channel-Level Intercept-Only Models (H0: beta0 = 0)
-%% Formula: Beta ~ 1 + (1 | Session_ID)
-%% -------------------------------------------------------------------------
+%% 7a. Track 1: Channel-Level Intercept-Only Models (H0: beta0 = 0)
+% Formula: Beta ~ 1 + (1 | Session_ID)
+
+% Command window update prompt
 fprintf('Evaluating Track 1: Channel manipulation checks across 41 channels...\n');
 
+% Loop through each chromophore (HbDiff, HbO, HbR)
 for c = 1:length(chroms)
+
+    % Extract current chromophore label
     chrom_str = chroms{c};
     
+    % For each of the 41 channels
     for ch_idx = 1:length(channels)
+
+        % Extract current channel 1-41
         chan_num = channels(ch_idx);
         
+        % For each task contrasts
         for t = 1:length(tasks)
+
+            % Extract current task
             task_str = tasks{t};
             
+            % Create row mask filtering Track 1's long table made in a
+            % prior section
             sub_idx = Track1_Channel_Long_Table.Baseline_Type == primary_baseline & ...
                       Track1_Channel_Long_Table.Chromophore == chrom_str & ...
                       Track1_Channel_Long_Table.Channel == chan_num & ...
                       Track1_Channel_Long_Table.Task_Contrast == task_str;
                   
+            % Similar to RQ1 and RQ2 later, here we want to add a status
+            % check for the CSV output
+
+            % Locale first matching row for metadata
+            meta_idx = find(sub_idx, 1, 'first');
+            if isempty(meta_idx), continue; end
+            
+            % Extract the valid observations for this channel x task
             sub_tbl = Track1_Channel_Long_Table(sub_idx, :);
-            % if height(sub_tbl) < 5, continue; end
+            sub_tbl = sub_tbl(~isnan(sub_tbl.Beta), :);
             
             try
+                % Abort if zero non-NaN contrast betas remain
+                if height(sub_tbl) == 0
+                    error('No valid observations remaining.');
+                end
+                
+                % Drop unused Session_ID factor levels so random-effect design matrix has clean dimensions
+                sub_tbl.Session_ID = removecats(categorical(sub_tbl.Session_ID));
+
+                % MODEL 1: BASELINE LME with dyad random intercept for
+                % Regions of interest
                 lme = fitlme(sub_tbl, 'Beta ~ 1 + (1 | Session_ID)');
                 
-                b0    = lme.Coefficients.Estimate(1);
-                se0   = lme.Coefficients.SE(1);
+                % Extract fixed-effect intercept estimate, SE, t-stat,
+                % p-val, and 95% CI
+                b0 = lme.Coefficients.Estimate(1);
+                se0 = lme.Coefficients.SE(1);
                 tstat = lme.Coefficients.tStat(1);
-                pval  = lme.Coefficients.pValue(1);
-                ci    = lme.coefCI;
+                pval = lme.Coefficients.pValue(1);
+                ci = lme.coefCI;
                 
-                validation_chan_rows(end+1, 1:16) = { ...
+                % Append Model Status row among other metadata info for
+                % manip check CSVs
+                validation_chan_rows(end+1, 1:17) = { ...
                     string(primary_baseline), string(task_str), ...
-                    string(sub_tbl.Timescale(1)), sub_tbl.Timescale_Num(1), ...
-                    string(chrom_str), chan_num, sub_tbl.Source(1), sub_tbl.Detector(1), ...
-                    string(sub_tbl.ROI(1)), height(sub_tbl), ...
-                    b0, se0, tstat, pval, ci(1,1), ci(1,2) ...
+                    string(Track1_Channel_Long_Table.Timescale(meta_idx)), ...
+                    Track1_Channel_Long_Table.Timescale_Num(meta_idx), ...
+                    string(chrom_str), chan_num, ...
+                    Track1_Channel_Long_Table.Source(meta_idx), ...
+                    Track1_Channel_Long_Table.Detector(meta_idx), ...
+                    string(Track1_Channel_Long_Table.ROI(meta_idx)), height(sub_tbl), ...
+                    b0, se0, tstat, pval, ci(1,1), ci(1,2), "OK" ...
                 };
-            catch
-                % Skip occasional non-converging or singular channel fit
+            catch ME
+                % Record NaN placeholder row with diagnostic status if model fails to converge or lacks data
+                status_msg = "Skipped: " + string(ME.message);
+                validation_chan_rows(end+1, 1:17) = { ...
+                    string(primary_baseline), string(task_str), ...
+                    string(Track1_Channel_Long_Table.Timescale(meta_idx)), ...
+                    Track1_Channel_Long_Table.Timescale_Num(meta_idx), ...
+                    string(chrom_str), chan_num, ...
+                    Track1_Channel_Long_Table.Source(meta_idx), ...
+                    Track1_Channel_Long_Table.Detector(meta_idx), ...
+                    string(Track1_Channel_Long_Table.ROI(meta_idx)), height(sub_tbl), ...
+                    NaN, NaN, NaN, NaN, NaN, NaN, status_msg ...
+                };
             end
         end
     end
 end
 
-Table_Validation_Channels = cell2table(validation_chan_rows, 'VariableNames', { ...
+% Convert accumulated channel validation rows into a structured MATLAB table
+val_chan_cols = { ...
     'Baseline_Type', 'Task_Contrast', 'Timescale', 'Timescale_Num', ...
     'Chromophore', 'Channel', 'Source', 'Detector', 'ROI', 'N_Obs', ...
-    'Beta_0', 'SE', 'T_Stat', 'P_Val', 'CI_Lower', 'CI_Upper' ...
-});
+    'Beta_0', 'SE', 'T_Stat', 'P_Val', 'CI_Lower', 'CI_Upper', 'Model_Status' ...
+};
+if isempty(validation_chan_rows)
+    Table_Validation_Channels = cell2table(cell(0, length(val_chan_cols)), 'VariableNames', val_chan_cols);
+else
+    Table_Validation_Channels = cell2table(validation_chan_rows, 'VariableNames', val_chan_cols);
+end
 
-fprintf('Track 1 Channel Validation complete: %d models evaluated.\n', height(Table_Validation_Channels));
+% Command window update prompt
+fprintf('Track 1 Channel Validation complete: %d rows recorded (%d estimated).\n', ...
+    height(Table_Validation_Channels), sum(Table_Validation_Channels.Model_Status == "OK"));
 
-%% -------------------------------------------------------------------------
-%% 7B. Track 2: ROI-Level Intercept-Only Models (H0: beta0 = 0)
-%% Formula: Beta_ROI ~ 1 + (1 | Session_ID)
-%% -------------------------------------------------------------------------
+%% Step 7b. Track 2: ROI-Level Intercept-Only Models (H0: beta0 = 0)
+% Tests whether ROI-averaged task activation differs significantly from baseline (0) across the 5 ROIs:
+% Formula: Beta_ROI ~ 1 + (1 | Session_ID)
+
+% Command window update
 fprintf('Evaluating Track 2: ROI manipulation checks across %d ROIs and %d chromophores...\n', ...
     length(rois), length(chroms));
 
+% Loop through each chromo (HbDiff, HbO, HbR)
 for c = 1:length(chroms)
+
+    % Extract current chromo
     chrom_str = chroms{c};
     
+    % Loop through each one of the 5 ROIs
     for r = 1:length(rois)
+
+        % Extract the current ROI
         roi_str = rois{r};
         
+        % Loop through each of the task contrasts
         for t = 1:length(tasks)
+
+            % Extract the current task
             task_str = tasks{t};
             
+            % Create row filtering based on Track two long table from
+            % previous section
             sub_idx = Track2_ROI_Long_Table.Baseline_Type == primary_baseline & ...
                       Track2_ROI_Long_Table.Chromophore == chrom_str & ...
                       Track2_ROI_Long_Table.ROI == roi_str & ...
                       Track2_ROI_Long_Table.Task_Contrast == task_str;
                   
+            % Find the first matching row for metadata
+            meta_idx = find(sub_idx, 1, 'first');
+            % skip if baseline x chromo x roi x task does not exist in
+            % track two ROIs
+            if isempty(meta_idx), continue; end
+
+            % slice track two to the matching ptp row for this ROI x task
             sub_tbl = Track2_ROI_Long_Table(sub_idx, :);
-            % if height(sub_tbl) < 5, continue; end
+            % Drop any rows with missing (NaN) ROI-averaged contrast estimates
+            sub_tbl = sub_tbl(~isnan(sub_tbl.Beta_ROI), :);
             
+            % Baseline LME on baseline only but with ROI instead of
+            % channels
             try
+                % Trigger catch fallback if zero valid participant observations remain
+                if height(sub_tbl) == 0
+                    error('No valid observations remaining.');
+                end
+                
+                % Remove unobserved Session_ID levels prior to fitting random-effect grouping structure
+                sub_tbl.Session_ID = removecats(categorical(sub_tbl.Session_ID));
+
+                % MODEL 1: BASELINE LME with dyad random intercept for ROIs
                 lme = fitlme(sub_tbl, 'Beta_ROI ~ 1 + (1 | Session_ID)');
                 
-                b0    = lme.Coefficients.Estimate(1);
-                se0   = lme.Coefficients.SE(1);
-                tstat = lme.Coefficients.tStat(1);
-                pval  = lme.Coefficients.pValue(1);
-                ci    = lme.coefCI;
+                b0 = lme.Coefficients.Estimate(1); % intercept estiamte
+                se0 = lme.Coefficients.SE(1); % SE
+                tstat = lme.Coefficients.tStat(1); % t-test
+                pval = lme.Coefficients.pValue(1); % p-val
+                ci = lme.coefCI; % 95% CI
                 
-                validation_roi_rows(end+1, 1:13) = { ...
-                    string(primary_baseline), string(task_str), ...
-                    string(sub_tbl.Timescale(1)), sub_tbl.Timescale_Num(1), ...
-                    string(chrom_str), string(roi_str), height(sub_tbl), ...
-                    b0, se0, tstat, pval, ci(1,1), ci(1,2) ...
+                % Append 14-column estimated result row to the Track 2 validation cell accumulator
+                validation_roi_rows(end+1, 1:14) = { ...
+                    string(primary_baseline), ... % Baseline_Type ('TaskMatched')
+                    string(task_str), ... % Task_Contrast name
+                    string(Track2_ROI_Long_Table.Timescale(meta_idx)), ... % Timescale ('Transient' or 'Sustained')
+                    Track2_ROI_Long_Table.Timescale_Num(meta_idx), ... % Timescale_Num (1 or 0)
+                    string(chrom_str), ... % Chromophore ('HBO', 'HBR', 'HBDIFF')
+                    string(roi_str), ... % Functional ROI label
+                    height(sub_tbl), ... % N_Obs; N Observations (number of valid participants)
+                    b0, se0, tstat, pval, ci(1,1), ci(1,2), ... % Model parameters & 95% CI
+                    "OK" ... % Model_Status flag
                 };
             catch ME
+                % Print warning to Command Window if an ROI-level validation model fails
                 warning('ROI model failed for [%s - %s - %s]: %s', chrom_str, roi_str, task_str, ME.message);
+
+                % Format diagnostic status message for table logging
+                status_msg = "Skipped: " + string(ME.message);
+                
+                % Append NaN placeholder row so every Chromophore x ROI x Task combination remains in the CSV
+                validation_roi_rows(end+1, 1:14) = { ...
+                    string(primary_baseline), ... % Baseline_Type
+                    string(task_str), ... % Task_Contrast
+                    string(Track2_ROI_Long_Table.Timescale(meta_idx)), ... % Timescale
+                    Track2_ROI_Long_Table.Timescale_Num(meta_idx), ... % Timescale_Num
+                    string(chrom_str), ... % Chromophore
+                    string(roi_str), ... % Functional ROI
+                    height(sub_tbl), ... % N_Obs
+                    NaN, NaN, NaN, NaN, NaN, NaN, ... % Unestimated statistics filled with NaN
+                    status_msg ... % Diagnostic failure reason
+                };
             end
         end
     end
 end
 
-Table_Validation_ROI = cell2table(validation_roi_rows, 'VariableNames', { ...
+% Define standardized 14-column headers for the ROI-level manipulation check table
+val_roi_cols = { ...
     'Baseline_Type', 'Task_Contrast', 'Timescale', 'Timescale_Num', ...
-    'Chromophore', 'ROI', 'N_Obs', 'Beta_0', 'SE', 'T_Stat', 'P_Val', 'CI_Lower', 'CI_Upper' ...
-});
+    'Chromophore', 'ROI', 'N_Obs', 'Beta_0', 'SE', 'T_Stat', 'P_Val', 'CI_Lower', 'CI_Upper', 'Model_Status' ...
+};
 
-fprintf('Track 2 ROI Validation complete: %d models evaluated.\n', height(Table_Validation_ROI));
-
-%% -------------------------------------------------------------------------
-%% 7C. FIR Impulse Shape Validation Check
-%% -------------------------------------------------------------------------
-fprintf('Verifying FIR dataset availability from SubjStats_FIR...\n');
-
-if exist('SubjStats_FIR', 'var') && ~isempty(SubjStats_FIR)
-    fprintf('FIR dataset available: %d participants loaded for curve inspection.\n', length(SubjStats_FIR));
+% Convert accumulated ROI cell rows into a MATLAB table (handling empty edge case gracefully)
+if isempty(validation_roi_rows)
+    Table_Validation_ROI = cell2table(cell(0, length(val_roi_cols)), 'VariableNames', val_roi_cols);
 else
-    warning('SubjStats_FIR not found in memory. Proceeding without FIR array inspection.');
+    Table_Validation_ROI = cell2table(validation_roi_rows, 'VariableNames', val_roi_cols);
 end
 
-%% -------------------------------------------------------------------------
-%% 7D. Export Deliverables to Scripts/Output/GroupLevel
-%% -------------------------------------------------------------------------
-val_chan_csv = fullfile(group_out_dir, 'Table_Validation_ManipulationChecks_Channels.csv');
-val_roi_csv  = fullfile(group_out_dir, 'Table_Validation_ManipulationChecks_ROI.csv');
-val_mat      = fullfile(group_out_dir, 'GroupLevel_Validation_Models.mat');
+% Report total ROI rows recorded vs. successfully estimated models
+fprintf('Track 2 ROI Validation complete: %d rows recorded (%d estimated).\n', ...
+    height(Table_Validation_ROI), sum(Table_Validation_ROI.Model_Status == "OK"));
 
+%% 7c. FIR Impulse Shape Validation Check
+
+% fprintf('Verifying FIR dataset availability from SubjStats_FIR...\n');
+% 
+% if exist('SubjStats_FIR', 'var') && ~isempty(SubjStats_FIR)
+%     fprintf('FIR dataset available: %d participants loaded for curve inspection.\n', length(SubjStats_FIR));
+% else
+%     warning('SubjStats_FIR not found in memory. Proceeding without FIR array inspection.');
+% end
+
+%% 7d. Export Validation Deliverables & Print Significant Summary
+
+% Construct output files
+val_chan_csv = fullfile(group_out_dir, 'Table_Validation_ManipulationChecks_Channels.csv');
+val_roi_csv = fullfile(group_out_dir, 'Table_Validation_ManipulationChecks_ROI.csv');
+val_mat = fullfile(group_out_dir, 'GroupLevel_Validation_Models.mat');
+
+% Export channel and ROI manip check tables to CSVs
 writetable(Table_Validation_Channels, val_chan_csv);
 writetable(Table_Validation_ROI, val_roi_csv);
 save(val_mat, 'Table_Validation_Channels', 'Table_Validation_ROI');
 
+% Print confirmation to command window
 fprintf('Section E complete. Saved validation deliverables to:\n  -> %s\n  -> %s\n  -> %s\n', ...
     val_chan_csv, val_roi_csv, val_mat);
 
@@ -850,28 +1001,18 @@ fprintf('Section E complete. Saved validation deliverables to:\n  -> %s\n  -> %s
 sig_roi = Table_Validation_ROI(Table_Validation_ROI.P_Val < 0.05, :);
 fprintf('\nSignificant ROI-level manipulation checks (p < .05, uncorrected): %d / %d\n', ...
     height(sig_roi), height(Table_Validation_ROI));
+
+% Displays top 12 sig ROI manip checks
 disp(head(sig_roi(:, {'Task_Contrast', 'Chromophore', 'ROI', 'Beta_0', 'T_Stat', 'P_Val'}), 12));
 
+%% Section F (RQ1)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-% AI
 % 8B "All second-level group models included participant age, sex, and a
 % binary indicator of whether the dyad visited a second destination as fixed-effect covariates."
 
+% this is where I had to confirm second dest as optional for those that
+% didn't have it - maybe it would have been fine without since tricorder
+% was fine without?
 % if numel(categories(sub_tbl.Second_Dest_Dummy)) > 1
 %     formula_str = 'Beta ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
 % else
@@ -884,17 +1025,21 @@ disp(head(sig_roi(:, {'Task_Contrast', 'Chromophore', 'ROI', 'Beta_0', 'T_Stat',
 % or 1 based on first arrival + age in years mean centered + gender dummy
 % coded + 1 or 0 based on if a second location was visited + dyad intercept
 % + validation
-% "LME modeling was selected to handle the hierarchical, nested dependencies inherent to dyadic data. Because each participant contributes one contrast estimate per model, each model included a random intercept for dyad."
+% "LME modeling was selected to handle the hierarchical, nested dependencies 
+% inherent to dyadic data. Because each participant contributes one contrast 
+% estimate per model, each model included a random intercept for dyad."
 
-% "Team Performance (Binary Outcome): LME models evaluated ROI contrast
-% estimates as a function of the binary team performance outcome (Correct vs.\ Decoy first-site selection), with the random intercept for dyad accounting for cross-partner dependencies. "
+% "Team Performance: LME models evaluated ROI contrast
+% estimates as a function of the binary team performance outcome 
+% (Correct vs.\ Decoy first-site selection), with the random intercept for 
+% dyad accounting for cross-partner dependencies. "
 % represents: 
 % formula_str = 'Beta_ROI ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
 % lme = fitlme(sub_tbl, formula_str);
-%% =========================================================================
-%  SECTION F: RQ1 - Team Performance Group LME Models (Step 8)
-%  [Precision-Weighted via Inverse-Variance Weights: w = 1 / SE^2]
-%  =========================================================================
+
+% Precision-Weighted via Inverse-Variance Weights: w = 1 / SE^2
+
+% Command window update prompt
 fprintf('\n--- Section F: Evaluating RQ1 Team Performance LME Models (Precision-Weighted) ---\n');
 
 primary_baseline = 'TaskMatched';
