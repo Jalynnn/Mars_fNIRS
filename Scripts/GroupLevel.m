@@ -854,7 +854,7 @@ end
 fprintf('Track 1 Channel Validation complete: %d rows recorded (%d estimated).\n', ...
     height(Table_Validation_Channels), sum(Table_Validation_Channels.Model_Status == "OK"));
 
-%% Step 7b. Track 2: ROI-Level Intercept-Only Models (H0: beta0 = 0)
+%% 7b. Track 2: ROI-Level Intercept-Only Models (H0: beta0 = 0)
 % Tests whether ROI-averaged task activation differs significantly from baseline (0) across the 5 ROIs:
 % Formula: Beta_ROI ~ 1 + (1 | Session_ID)
 
