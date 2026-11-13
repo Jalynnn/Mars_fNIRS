@@ -107,7 +107,7 @@ raw = raw(sort_order);
 % Confirm fix in command window --> confirmed
 % fprintf('Raw(1) is now: %s\n', raw(1).demographics('Subject'));
 
-% Command Window Update
+% Command Window Updates
 fprintf('\n Providing a Visual of Raw(1) \n')
 fprintf('\n For Better Visuals; Visualize_Dyads.m \n')
 
@@ -216,6 +216,7 @@ for i = 1:length(raw)
     % We can assign all of the events to each individual
     % Using their position in raw
     % E.g. Ptp 1 is raw(1)
+    % fs not used until Section C
     fs = 1 / mean(diff(raw(i).time));
     individual_events = unique(subj_events.event);
 
@@ -358,7 +359,7 @@ for i = 1:length(raw)
     all_types = [repmat({'FID'}, length(fid_labels), 1); ...
                  repmat({'Source'}, length(src_labels), 1); ...
                  repmat({'Detector'}, length(det_labels), 1)];
-    all_xyz   = [fid_coords; src_coords; det_coords];
+    all_xyz = [fid_coords; src_coords; det_coords];
     all_units = repmat({'mm'}, length(all_names), 1);
     
     % Build registered 3D optodes table
@@ -461,7 +462,8 @@ for i = 1:length(raw)
 
     % Actually compute SNR
     % Previously, only the following three lines were required
-    % They were replaced once I wanted to keep snr within the events
+    % They were replaced once I wanted to keep snr within the events and
+    % not across the entire raw intensity
 
     % % mean intensity across all time points
     % mean_intensity = mean(d, 1);
@@ -481,7 +483,7 @@ for i = 1:length(raw)
 
     % Create empty arrays for event timings
     task_onsets = [];
-    task_ends   = [];
+    task_ends = [];
 
     % Loop through all events
     for k = 1:length(cond_keys)
@@ -512,18 +514,18 @@ for i = 1:length(raw)
 
             % Append start times and calculated end times
             task_onsets = [task_onsets; st.onset(:)];
-            task_ends   = [task_ends; st.onset(:) + durs];
+            task_ends = [task_ends; st.onset(:) + durs];
         end
     end
 
     % Convert timestamps (durations) to samples (can't just add 60 seconds)
     if ~isempty(task_onsets)
         first_sample = max(1, round(min(task_onsets) * raw(i).Fs));
-        last_sample  = min(size(d, 1), round(max(task_ends) * raw(i).Fs));
-        task_slice   = first_sample:last_sample;
+        last_sample = min(size(d, 1), round(max(task_ends) * raw(i).Fs));
+        task_slice = first_sample:last_sample;
     else
         % Fallback to full duration if no task keys found
-        task_slice   = 1:size(d, 1);
+        task_slice = 1:size(d, 1);
     end
 
     % Compute SNR strictly across the active task slice
@@ -550,7 +552,7 @@ for i = 1:length(raw)
     known_short_pairs = [
         4, 16; 6, 17; 7, 18; 8, 19;
         11, 20; 13, 21; 14, 22; 15, 23
-        ];
+    ];
 
     % which pairs are SSC pairs
     % default set them all to false
@@ -609,7 +611,10 @@ for i = 1:length(raw)
     qa_summary(i).PrunedChanList = strjoin(bad_chan_names, '; ');
     
     % Participant Usability Check:
-    % Cara noted 6 participants had poor signal quality. Which ones??
+    % Cara noted 6 participants had poor signal quality. Which ones?? I
+    % have shared the updated ptp count to use instead. 
+    % Considered removing participants if more than half their channels are
+    % bad, but instead just excluded that channel
     % OLD: If over 50% of a participant's long channels are pruned, flag as unusable.
     % if num_bad_pairs > (0.50 * num_long_pairs)
     %     qa_summary(i).Status = 'Excluded_PoorSignal';
@@ -652,8 +657,9 @@ fprintf('\nCohort Channel QC Complete: %d participants usable for GLM/ROI analys
     num_usable, num_excluded);
 
 % Write CSV report into Derivatives folder
-qa_export_dir = 'D:\GitHub\Mars_fNIRS\Scripts\PreprocessOutput'; 
-% qa_export_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Scripts\PreprocessOutput'; % Laptop
+% qa_export_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Output\Preprocess'; % Laptop 
+qa_export_dir = 'D:\GitHub\Mars_fNIRS\Output\Preprocess'; % PC
+
 if ~exist(qa_export_dir, 'dir')
     mkdir(qa_export_dir);
 end
@@ -735,8 +741,8 @@ fprintf('\n--- Preprocessing Pipeline Complete ---\n')
 %% 12. Save Preprocess Data
 
 % Folder to save the export to
-% export_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Derivatives'; % Laptop
-export_dir = 'D:\GitHub\Mars_fNIRS\Data\Derivatives'; % PC
+% export_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Output\Preprocess'; % Laptop
+export_dir = 'D:\GitHub\Mars_fNIRS\Output\Preprocess'; % PC
 
 % Name of the output file
 save_file = fullfile(export_dir, 'Hb_preprocessed_cohort.mat');
@@ -753,6 +759,7 @@ end
 fprintf('Saving preprocessed cohort of data to %s ... \n', save_file)
 
 % -v7.3 tells MATLAB to use HDF5-based file format instead of old v7
+% Not sure if necessary but just in case
 save(save_file, 'Hb', 'qa_table', '-v7.3');
 
 % Command window update

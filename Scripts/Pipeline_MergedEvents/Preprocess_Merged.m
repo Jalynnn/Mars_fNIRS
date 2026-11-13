@@ -1,6 +1,7 @@
 % Preprocess.m
 % Jalynn Nicoly September 29th, 2026
 % This is script 1/4 with a focus on loading and cleaning the fNIRS data
+% (with merged enroute/at!)
 % Input: Raw .nirs data; digitization .txt files; Experimental CSVs
 % Task: Complete preprocessing pipeline
 % Output: Cleaned time series .mat; QA CSV Summary;
@@ -107,7 +108,7 @@ raw = raw(sort_order);
 % Confirm fix in command window --> confirmed
 % fprintf('Raw(1) is now: %s\n', raw(1).demographics('Subject'));
 
-% Command Window Update
+% Command Window Updates
 fprintf('\n Providing a Visual of Raw(1) \n')
 fprintf('\n For Better Visuals; Visualize_Dyads.m \n')
 
@@ -164,10 +165,119 @@ end
 % Command window update
 fprintf('Demographics attached for %d participants.\n', length(raw));
 
+% %% 4. Extract Events
+% 
+% % Command Window Update
+% fprintf('\n--- Extracting Events for Each Participant ---\n')
+% 
+% % Load Events File
+% event_csv_path = 'D:\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV3.csv'; % PC
+% % event_csv_path = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV3.csv'; % Laptop
+% event_table = readtable(event_csv_path);
+% 
+% % Event data will be grouped by ptp stored in a struct
+% events_by_ptp = struct();
+% 
+% % Goal is to search through csv and assign events
+% % to the corresponding ptp in both (1) the struct and 
+% % (2) in the "raw" variable
+% % Loop through all participants
+% for i = 1:length(raw)
+% 
+%     % Subject was assigned when raw was created
+%     % Subject refers to the name of the folder/the ptp
+%     % Added strtrim due to issues with 13.2 and 15.2
+%     subj_id = strtrim(raw(i).demographics('Subject'));
+% 
+%     % Added due to issues with 13.2 and 15.2 folder names from split files
+%     % Matches the exact folder name or cleaned folder strings 
+%     match_mask = strcmp(strtrim(event_table.fnirs_folder), subj_id) | ...
+%         strcmp(strrep(strtrim(event_table.fnirs_folder), '-', '_'), strrep(subj_id, '-', '_'));
+% 
+%     % Search events_table for only this subj_id
+%     % Save only the events for this subj
+%     % Replaced during ptp 13 and 15 fixes to account for one or the other
+%     % matches
+%     % subj_events = event_table(strcmp(event_table.fnirs_folder, subj_id), :);
+%     subj_events = event_table(match_mask, :);
+% 
+%     % Confirm there are events - yay easy confirm
+%     % if empty end, else continue
+%     if isempty(subj_events)
+%         warning('Critical: No events found in CSV for subject "%s" (index %d). Skipped event replacement.', subj_id, i);
+%         continue; 
+%     end
+% 
+%     % Store the subj_events for each subj_id
+%     % Uses the struct defined above
+%     % The folder names are not appropraite for matlab conventions
+%     events_by_ptp.(matlab.lang.makeValidName(['ptp_' subj_id])) = subj_events;
+% 
+%     % While the events are saved in a separate struct...
+%     % We can assign all of the events to each individual
+%     % Using their position in raw
+%     % E.g. Ptp 1 is raw(1)
+%     fs = 1 / mean(diff(raw(i).time));
+%     individual_events = unique(subj_events.event);
+% 
+%     % The LSL triggers that were sent are still saved in the fNIRS data
+%     % We want to remove them and instead use the CSV
+%     % This for now just creates an empty dictionary
+%     raw(i).stimulus = Dictionary();
+% 
+%     % Now we need to populate that dictionary with the CSV events
+%     for event = 1:length(individual_events)
+% 
+%         % Pulls the event name from the list of csv events for this
+%         % participant
+%         event_name = individual_events{event};
+% 
+%         % Creates a boolean mask matching all rows in the event table that
+%         % correspond with this condition name
+%         event_rows = strcmp(subj_events.event, event_name);
+% 
+%         % Extract sample indices and durations in second from table
+%         idx_samples = subj_events.onset_fnirs_index(event_rows);
+%         dur_seconds = subj_events.duration_s(event_rows);
+% 
+%         % Safety check - only keep valid indices within raw time bounds
+%         valid_mask = (idx_samples >= 1) & (idx_samples <= length(raw(i).time));
+%         if ~all(valid_mask)
+%             warning('Ptp %s: Excluded %d event(s) for "%s" exceeding time vector bounds.', ...
+%                 subj_id, sum(~valid_mask), event_name)
+%             idx_samples = idx_samples(valid_mask);
+%             dur_seconds = dur_seconds(valid_mask);
+%         end
+%         if isempty(idx_samples), continue; end
+% 
+%         % map sample indices to elapsed seconds using raw(i).time
+%         onset_seconds = raw(i).time(idx_samples);
+% 
+%         % Create empty NIRS Toolbox stimulus event object
+%         stim = nirs.design.StimulusEvents();
+%         % Assign the csv name to stimulus object
+%         stim.name = event_name;
+%         % Assign the csv onset to stimulus object in seconds
+%         stim.onset = onset_seconds;
+%         % Extract corresponding event duration in seconds
+%         stim.dur = dur_seconds;
+%         % Set regressor weights to 1 matching the number of event
+%         % occurrences
+%         stim.amp = ones(size(stim.onset));
+% 
+%         % Register stimulus event object into ptp's data object stimulus
+%         % dictionary (the empty one before the for loop)
+%         raw(i).stimulus(event_name) = stim;
+%     end
+% end
+% 
+% % Command Window Update
+% fprintf('\n--- All Events Extracted ---\n')
+
 %% 4. Extract Events
 
 % Command Window Update
-fprintf('\n--- Extracting Events for Each Participant ---\n')
+fprintf('\n--- Extracting Events for Each Participant (Merged) ---\n')
 
 % Load Events File
 event_csv_path = 'D:\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV3.csv'; % PC
@@ -177,6 +287,14 @@ event_table = readtable(event_csv_path);
 % Event data will be grouped by ptp stored in a struct
 events_by_ptp = struct();
 
+% This section is added for the merged pipeline
+% Destination pairs to synthesize into continuous sustained epochs
+% enroute and at will merge to 'sustained'
+merge_pairs = { ...
+    'enroute_true_site',  'at_true_site',  'sustained_true_site'; ...
+    'enroute_decoy_site', 'at_decoy_site', 'sustained_decoy_site'  ...
+};
+
 % Goal is to search through csv and assign events
 % to the corresponding ptp in both (1) the struct and 
 % (2) in the "raw" variable
@@ -185,15 +303,27 @@ for i = 1:length(raw)
 
     % Subject was assigned when raw was created
     % Subject refers to the name of the folder/the ptp
-    subj_id = raw(i).demographics('Subject');
+    % Added strtrim due to issues with 13.2 and 15.2
+    subj_id = strtrim(raw(i).demographics('Subject'));
+
+    % Added due to issues with 13.2 and 15.2 folder names from split files
+    % Matches the exact folder name or cleaned folder strings 
+    match_mask = strcmp(strtrim(event_table.fnirs_folder), subj_id) | ...
+        strcmp(strrep(strtrim(event_table.fnirs_folder), '-', '_'), strrep(subj_id, '-', '_'));
 
     % Search events_table for only this subj_id
     % Save only the events for this subj
-    subj_events = event_table(strcmp(event_table.fnirs_folder, subj_id), :);
+    % Replaced during ptp 13 and 15 fixes to account for one or the other
+    % matches
+    % subj_events = event_table(strcmp(event_table.fnirs_folder, subj_id), :);
+    subj_events = event_table(match_mask, :);
 
     % Confirm there are events - yay easy confirm
     % if empty end, else continue
-    if isempty(subj_events), continue; end
+    if isempty(subj_events)
+        warning('Critical: No events found in CSV for subject "%s" (index %d). Skipped event replacement.', subj_id, i);
+        continue;
+    end
 
     % Store the subj_events for each subj_id
     % Uses the struct defined above
@@ -204,6 +334,7 @@ for i = 1:length(raw)
     % We can assign all of the events to each individual
     % Using their position in raw
     % E.g. Ptp 1 is raw(1)
+    % fs not used until Section C
     fs = 1 / mean(diff(raw(i).time));
     individual_events = unique(subj_events.event);
 
@@ -212,12 +343,16 @@ for i = 1:length(raw)
     % This for now just creates an empty dictionary
     raw(i).stimulus = Dictionary();
 
+    % Subsection for all events - upcoming subsection to merge enroute and
+    % at - this is specific to the merged pipeline - however, this first
+    % subsection is identical to the unmerged pipeline
+
     % Now we need to populate that dictionary with the CSV events
-    for event = 1:length(individual_events)
+    for event_idx = 1:length(individual_events)
 
         % Pulls the event name from the list of csv events for this
         % participant
-        event_name = individual_events{event};
+        event_name = individual_events{event_idx};
 
         % Creates a boolean mask matching all rows in the event table that
         % correspond with this condition name
@@ -239,15 +374,15 @@ for i = 1:length(raw)
 
         % map sample indices to elapsed seconds using raw(i).time
         onset_seconds = raw(i).time(idx_samples);
-        
+
         % Create empty NIRS Toolbox stimulus event object
         stim = nirs.design.StimulusEvents();
         % Assign the csv name to stimulus object
         stim.name = event_name;
         % Assign the csv onset to stimulus object in seconds
-        stim.onset = onset_seconds;
+        stim.onset = onset_seconds(:);
         % Extract corresponding event duration in seconds
-        stim.dur = dur_seconds;
+        stim.dur = dur_seconds(:);
         % Set regressor weights to 1 matching the number of event
         % occurrences
         stim.amp = ones(size(stim.onset));
@@ -256,139 +391,101 @@ for i = 1:length(raw)
         % dictionary (the empty one before the for loop)
         raw(i).stimulus(event_name) = stim;
     end
-end
 
-% Command Window Update
-fprintf('\n--- All Events Extracted ---\n')
-%% SECTION FOUR COMPLETLY OVERWRITTEN
-%% =========================================================================
-%  Section 4: Extract Events & Synthesize Merged Destination Boxcars
-%  Pipeline_MergedEvents Architecture
-%  =========================================================================
-fprintf('\n--- Extracting Events & Synthesizing Merged Destination Boxcars ---\n');
+    % This is the new subsection specifically to merge the enroute and at
+    % site events to 'sustained' as defined above
+    % The timespan is from enroute onset to end of at site
 
-event_csv_path = 'D:\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV3.csv';
-event_table = readtable(event_csv_path);
-
-events_by_ptp = struct();
-
-% Destination pairs to synthesize into continuous sustained epochs
-merge_pairs = { ...
-    'enroute_true_site',  'at_true_site',  'sustained_true_site'; ...
-    'enroute_decoy_site', 'at_decoy_site', 'sustained_decoy_site'  ...
-};
-
-for i = 1:length(raw)
-    subj_id = raw(i).demographics('Subject');
-
-    % Delimiter-agnostic folder matching (handles P13 and P53 hyphens/underscores)
-    subj_events = event_table( ...
-        strcmp(event_table.fnirs_folder, subj_id) | ...
-        strcmp(event_table.fnirs_folder, strrep(subj_id, '_', '-')) | ...
-        strcmp(event_table.fnirs_folder, strrep(subj_id, '-', '_')), :);
-
-    if isempty(subj_events)
-        warning('Ptp %s: No event rows found in CSV!', subj_id);
-        continue;
-    end
-
-    events_by_ptp.(matlab.lang.makeValidName(['ptp_' subj_id])) = subj_events;
-    raw(i).stimulus = Dictionary();
-
-    % ---------------------------------------------------------------------
-    % Part A: Register All Base CSV Events
-    % ---------------------------------------------------------------------
-    individual_events = unique(subj_events.event);
-
-    for event_idx = 1:length(individual_events)
-        event_name = individual_events{event_idx};
-        event_rows = strcmp(subj_events.event, event_name);
-
-        idx_samples = subj_events.onset_fnirs_index(event_rows);
-        dur_seconds = subj_events.duration_s(event_rows);
-
-        % Safety check against recording duration
-        valid_mask = (idx_samples >= 1) & (idx_samples <= length(raw(i).time));
-        if ~all(valid_mask)
-            idx_samples = idx_samples(valid_mask);
-            dur_seconds = dur_seconds(valid_mask);
-        end
-        if isempty(idx_samples), continue; end
-
-        onset_seconds = raw(i).time(idx_samples);
-
-        stim = nirs.design.StimulusEvents();
-        stim.name  = event_name;
-        stim.onset = onset_seconds(:);
-        stim.dur   = dur_seconds(:);
-        stim.amp   = ones(size(stim.onset));
-
-        raw(i).stimulus(event_name) = stim;
-    end
-
-    % ---------------------------------------------------------------------
-    % Part B: Synthesize Merged Sustained Destination Events
-    % Span: Enroute Onset -> End of Point-of-Arrival (at_site)
-    % ---------------------------------------------------------------------
+    % For both true and decoy...
     for mp = 1:size(merge_pairs, 1)
-        enroute_name = merge_pairs{mp, 1};
-        at_name      = merge_pairs{mp, 2};
-        merged_name  = merge_pairs{mp, 3};
 
+        % Name of enroute (true or decoy)
+        enroute_name = merge_pairs{mp, 1};
+
+        % Name of at (true or decoy)
+        at_name = merge_pairs{mp, 2};
+
+        % The merged name 'sustained'
+        merged_name = merge_pairs{mp, 3};
+
+        % If the current event is enroute or at
         if raw(i).stimulus.iskey(enroute_name) && raw(i).stimulus.iskey(at_name)
             stim_enroute = raw(i).stimulus(enroute_name);
-            stim_at      = raw(i).stimulus(at_name);
+            stim_at = raw(i).stimulus(at_name);
 
+            % Initialize empty onsets and durs arrays
             merged_onsets = [];
-            merged_durs   = [];
+            merged_durs = [];
 
             % Pair each enroute segment with its subsequent arrival segment
+            % Loops through the onset duration
             for en = 1:length(stim_enroute.onset)
+
+                % Establish start time
                 t_en_start = stim_enroute.onset(en);
-                t_en_end   = t_en_start + stim_enroute.dur(en);
+
+                % Establish the end of the 'enroute'
+                t_en_end = t_en_start + stim_enroute.dur(en);
 
                 % Find matching arrival occurring at or directly following enroute
                 % Tolerates up to 3.0s boundary gap due to UI/logging latency
                 match_at = find(stim_at.onset >= (t_en_start - 1.0) & ...
                                 stim_at.onset <= (t_en_end + 3.0), 1, 'first');
 
+                % Find the matching 'at' for the current 'enroute'
                 if ~isempty(match_at)
+
+                    % Establish start time
                     t_at_start = stim_at.onset(match_at);
-                    t_at_end   = t_at_start + stim_at.dur(match_at);
+
+                    % Establish the end of the 'at'
+                    t_at_end = t_at_start + stim_at.dur(match_at);
 
                     % Continuous boxcar boundaries
                     t_start = min(t_en_start, t_at_start);
-                    t_stop  = max(t_en_end, t_at_end);
+                    t_stop = max(t_en_end, t_at_end);
 
+                    % Onset and durs set for the merged enroute / at
                     merged_onsets(end+1, 1) = t_start;
-                    merged_durs(end+1, 1)   = t_stop - t_start;
+                    merged_durs(end+1, 1) = t_stop - t_start;
                 else
                     % Fallback: If no discrete at_site entry matched, retain enroute duration
                     merged_onsets(end+1, 1) = t_en_start;
-                    merged_durs(end+1, 1)   = stim_enroute.dur(en);
+                    merged_durs(end+1, 1) = stim_enroute.dur(en);
                 end
             end
 
             if ~isempty(merged_onsets)
+                % Create empty NIRS Toolbox stimulus event object
                 merged_stim = nirs.design.StimulusEvents();
-                merged_stim.name  = merged_name;
+                % Assign the csv name to stimulus object
+                merged_stim.name = merged_name;
+                % Assign the csv onset to stimulus object in seconds
                 merged_stim.onset = merged_onsets;
-                merged_stim.dur   = merged_durs;
-                merged_stim.amp   = ones(size(merged_onsets));
+                % Extract corresponding event duration in seconds
+                merged_stim.dur = merged_durs;
+                % Set regressor weights to 1 matching the number of event
+                % occurrences
+                merged_stim.amp = ones(size(merged_onsets));
 
+                % Register stimulus event object into ptp's data object stimulus
+                % dictionary (the empty one before the for loop)
                 raw(i).stimulus(merged_name) = merged_stim;
             end
         end
     end
 
+    % Verification prints that sustained (merged) events were created
     % Console verification per participant
-    has_m_true  = raw(i).stimulus.iskey('sustained_true_site');
+    has_m_true = raw(i).stimulus.iskey('sustained_true_site');
     has_m_decoy = raw(i).stimulus.iskey('sustained_decoy_site');
+
+    % Command window prompt
     fprintf('Subj %02d (%s): Stimulus conditions = %d | Merged: [True: %d, Decoy: %d]\n', ...
         i, subj_id, length(raw(i).stimulus.keys), has_m_true, has_m_decoy);
 end
 
-fprintf('\n--- All Events Extracted & Merged Conditions Generated ---\n');
+fprintf('\n--- All Events Extracted ---\n');
 
 %% SECTION B
 
@@ -475,7 +572,7 @@ for i = 1:length(raw)
     all_types = [repmat({'FID'}, length(fid_labels), 1); ...
                  repmat({'Source'}, length(src_labels), 1); ...
                  repmat({'Detector'}, length(det_labels), 1)];
-    all_xyz   = [fid_coords; src_coords; det_coords];
+    all_xyz = [fid_coords; src_coords; det_coords];
     all_units = repmat({'mm'}, length(all_names), 1);
     
     % Build registered 3D optodes table
@@ -578,7 +675,8 @@ for i = 1:length(raw)
 
     % Actually compute SNR
     % Previously, only the following three lines were required
-    % They were replaced once I wanted to keep snr within the events
+    % They were replaced once I wanted to keep snr within the events and
+    % not across the entire raw intensity
 
     % % mean intensity across all time points
     % mean_intensity = mean(d, 1);
@@ -598,7 +696,7 @@ for i = 1:length(raw)
 
     % Create empty arrays for event timings
     task_onsets = [];
-    task_ends   = [];
+    task_ends = [];
 
     % Loop through all events
     for k = 1:length(cond_keys)
@@ -629,18 +727,18 @@ for i = 1:length(raw)
 
             % Append start times and calculated end times
             task_onsets = [task_onsets; st.onset(:)];
-            task_ends   = [task_ends; st.onset(:) + durs];
+            task_ends = [task_ends; st.onset(:) + durs];
         end
     end
 
     % Convert timestamps (durations) to samples (can't just add 60 seconds)
     if ~isempty(task_onsets)
         first_sample = max(1, round(min(task_onsets) * raw(i).Fs));
-        last_sample  = min(size(d, 1), round(max(task_ends) * raw(i).Fs));
-        task_slice   = first_sample:last_sample;
+        last_sample = min(size(d, 1), round(max(task_ends) * raw(i).Fs));
+        task_slice = first_sample:last_sample;
     else
         % Fallback to full duration if no task keys found
-        task_slice   = 1:size(d, 1);
+        task_slice = 1:size(d, 1);
     end
 
     % Compute SNR strictly across the active task slice
@@ -667,7 +765,7 @@ for i = 1:length(raw)
     known_short_pairs = [
         4, 16; 6, 17; 7, 18; 8, 19;
         11, 20; 13, 21; 14, 22; 15, 23
-        ];
+    ];
 
     % which pairs are SSC pairs
     % default set them all to false
@@ -726,7 +824,10 @@ for i = 1:length(raw)
     qa_summary(i).PrunedChanList = strjoin(bad_chan_names, '; ');
     
     % Participant Usability Check:
-    % Cara noted 6 participants had poor signal quality. Which ones??
+    % Cara noted 6 participants had poor signal quality. Which ones?? I
+    % have shared the updated ptp count to use instead. 
+    % Considered removing participants if more than half their channels are
+    % bad, but instead just excluded that channel
     % OLD: If over 50% of a participant's long channels are pruned, flag as unusable.
     % if num_bad_pairs > (0.50 * num_long_pairs)
     %     qa_summary(i).Status = 'Excluded_PoorSignal';
@@ -769,10 +870,9 @@ fprintf('\nCohort Channel QC Complete: %d participants usable for GLM/ROI analys
     num_usable, num_excluded);
 
 % Write CSV report into Derivatives folder
-% qa_export_dir = 'D:\GitHub\Mars_fNIRS\Scripts\PreprocessOutput'; 
-%% OVERWRITTEN
-qa_export_dir = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents'; 
-% qa_export_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Scripts\PreprocessOutput'; % Laptop
+% qa_export_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents\Preprocess'; % Laptop
+qa_export_dir = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents\Preprocess'; % PC
+
 if ~exist(qa_export_dir, 'dir')
     mkdir(qa_export_dir);
 end
@@ -854,10 +954,8 @@ fprintf('\n--- Preprocessing Pipeline Complete ---\n')
 %% 12. Save Preprocess Data
 
 % Folder to save the export to
-% export_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Derivatives'; % Laptop
-% export_dir = 'D:\GitHub\Mars_fNIRS\Data\Derivatives'; % PC
-%% OVERWRITTEN
-export_dir = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents';
+% export_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents\Preprocess'; % Laptop
+export_dir = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents\Preprocess'; % PC
 
 % Name of the output file
 save_file = fullfile(export_dir, 'Hb_preprocessed_cohort.mat');
@@ -874,6 +972,7 @@ end
 fprintf('Saving preprocessed cohort of data to %s ... \n', save_file)
 
 % -v7.3 tells MATLAB to use HDF5-based file format instead of old v7
+% Not sure if necessary but just in case
 save(save_file, 'Hb', 'qa_table', '-v7.3');
 
 % Command window update

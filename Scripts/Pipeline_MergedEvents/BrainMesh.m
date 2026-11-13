@@ -1,5 +1,6 @@
 %% =========================================================================
-%  Plot_Cortical_Meshes_Merged.m
+%  BrainMesh.m
+%  Created with Gemini 
 %  Renders 3-angle cortical mesh figures (Front, Left, Right) with t-statistics
 %  projected onto Colin27 for Significant Channels and ROIs.
 %  =========================================================================
@@ -7,15 +8,15 @@ clc;
 
 % Define paths
 project_root = 'D:\GitHub\Mars_fNIRS';
-sig_dir      = fullfile(project_root, 'Output', 'Pipeline_MergedEvents', 'RQ_Sig');
+sig_dir      = fullfile(project_root, 'Output', 'Pipeline_MergedEvents', 'GroupLevel', 'RQ_Sig');
 fig_dir      = fullfile(project_root, 'Output', 'Pipeline_MergedEvents', 'Cortical_Plots');
 if ~exist(fig_dir, 'dir'), mkdir(fig_dir); end
 
 % Load Master Atlas Table with MNI coordinates
-atlas_file = fullfile(project_root, 'Output', 'Pipeline_MergedEvents', 'Master_Atlas_Key.mat');
-if ~exist(atlas_file, 'file')
-    atlas_file = fullfile(project_root, 'Output', 'GroupLevel', 'Master_Atlas_Key.mat');
-end
+atlas_file = fullfile(project_root, 'Output', 'Pipeline_MergedEvents', 'GroupLevel', 'Master_Atlas_Key.mat');
+% if ~exist(atlas_file, 'file')
+%     atlas_file = fullfile(project_root, 'Output', 'GroupLevel', 'Master_Atlas_Key.mat');
+% end
 load(atlas_file, 'Master_Atlas_Table');
 
 % The 4 Significant Deliverable Tables

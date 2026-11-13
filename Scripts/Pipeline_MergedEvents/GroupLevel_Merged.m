@@ -2,14 +2,14 @@
 % Jalynn Nicoly September 29th, 2026
 % This is script 3/4 with a focus on linear mixed-effects models
 % Input: FirstLevel_Cohort_Stats.mat
-% Task: Performing group level statistics
+% Task: Performing group level statistics with merged events
 % Output: Group-level statistical models; ROI summaries; FDR-correct
 % hypothesis table
 
-%% Section A
+%% Section A: Environment Setup & First-Level Data
 
 % Command Window Update
-fprintf('--- Starting fNIRS GroupLevel.m ---\n')
+fprintf('--- Starting fNIRS GroupLevel_Merged.m ---\n')
 
 % Clear Terminal
 clear, clc
@@ -37,8 +37,9 @@ addpath('D:\GitHub\NIRS_SPM_v4_r1') % PC
 fprintf('\n--- Loading First Level Data ---\n')
 
 % Set paths through folder to .mat file from FirstLevel
-results_dir = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents'; % OVERWRITTEN
-firstLevel_file = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents\FirstLevel_Results\FirstLevel_Cohort_Stats.mat'; % OVERWRITTEN
+results_dir = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents\Preprocess';
+% firstLevel_file = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents\Preprocess\FirstLevel\FirstLevel_Cohort_Stats.mat';
+firstLevel_file = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents\FirstLevel\FirstLevel_Cohort_Stats.mat';
 
 % Verify file exists
 if ~exist(firstLevel_file, 'file')
@@ -66,20 +67,7 @@ fprintf('   - Contrasts_HRF: TaskMatched (%d tasks), Fixation (%d tasks)\n', ...
 %% Section B
 
 % Command Window Update
-fprintf('\n--- Defining ROIs w/ MNI Association ---\n')
-
-% Part of identifying the 41 long channels is excluding the 8 SSCs which
-% were previously identified and available in the Output folder
-ssc_pairs = [
-    4, 16;
-    6, 17;
-    7, 18;
-    8, 19;
-    11, 20;
-    13, 21;
-    14, 22;
-    15, 13
-];
+fprintf('\n--- Loading Registered MNI Coordinates & Defining ROIs ---\n')
 
 % Recall ptps already have their digitization pairs
 % We can extract the channel midpoints and classify channels into the 4
@@ -121,7 +109,7 @@ fprintf('\n--- Section B: Loading Registered MNI Coordinates & Defining ROIs ---
 
 % Set and create GroupLevel directory
 project_root    = 'D:\GitHub\Mars_fNIRS';
-group_out_dir   = fullfile(project_root, 'Output', 'Pipeline_MergedEvents'); % OVERWRITTEN
+group_out_dir   = fullfile(project_root, 'Output', 'Pipeline_MergedEvents', 'GroupLevel'); % OVERWRITTEN
 if ~exist(group_out_dir, 'dir'), mkdir(group_out_dir); end
 
 %% 1. Define Channel Montage Configurations
@@ -145,10 +133,10 @@ ssc_pairs = [
 mni_avg_file = fullfile(group_out_dir, 'MNIs_Average.mat');
 % Fallback check in Derivatives if not yet moved
 if ~exist(mni_avg_file, 'file')
-    alt_file = fullfile(project_root, 'Output', 'GroupLevel', 'MNIs_Average.mat');
+    alt_file = fullfile(project_root, 'Output', 'Pipeline_MergedEvents', 'MNIs_Average.mat');
     if exist(alt_file, 'file')
         copyfile(alt_file, mni_avg_file);
-        fprintf('Copied MNIs_Average.mat into Output/Pipeline_MergedEvents.\n');
+        fprintf('Copied MNIs_Average.mat into Output/Pipeline_MergedEvents/GroupLevel.\n');
     else
         error('Pre-computed MNI file missing at: %s', mni_avg_file);
     end
@@ -216,7 +204,7 @@ for r = 1:length(roi_names)
     end
 end
 
-% Save Master Key Table to Output/GroupLevel
+% Save Master Key Table to Output/Pipeline_MergedEvents/GroupLevel
 atlas_key_file = fullfile(group_out_dir, 'Cortical_41Channels_MNI_Atlas_Key.csv');
 writetable(Master_Atlas_Table, atlas_key_file);
 save(fullfile(group_out_dir, 'Master_Atlas_Key.mat'), 'Master_Atlas_Table');
@@ -251,7 +239,7 @@ fprintf('\n--- Section C: Participant Demographics & Covariate Preparation ---\n
 % Ensure unified group output directory is set
 if ~exist('group_out_dir', 'var')
     project_root  = 'D:\GitHub\Mars_fNIRS';
-    group_out_dir = fullfile(project_root, 'Output', 'Pipeline_MergedEvents');
+    group_out_dir = fullfile(project_root, 'Output', 'Pipeline_MergedEvents', 'GroupLevel');
 end
 if ~exist(group_out_dir, 'dir'), mkdir(group_out_dir); end
 
@@ -391,7 +379,7 @@ Cohort_Covariates = table(ptp_id, session_id, age_raw, age_centered, ...
 fprintf('Cohort Covariate Table created for %d participants:\n', height(Cohort_Covariates));
 disp(Cohort_Covariates(1:min(8, height(Cohort_Covariates)), :));
 
-% Save table to Output/GroupLevel
+% Save table to Output/Pipeline_MergedEvents/GroupLevel
 save_cov_file = fullfile(group_out_dir, 'Cohort_Covariates_Table.csv');
 writetable(Cohort_Covariates, save_cov_file);
 fprintf('Saved Covariate Table to: %s\n', save_cov_file);
@@ -425,7 +413,7 @@ fprintf('\n--- Section D: Constructing Track 1 (Channels) & Track 2 (ROIs) ---\n
 
 %% Step 6. Setup Two Tracks for Group-Level Analysis
 if ~exist('group_out_dir', 'var')
-    group_out_dir = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents';
+    group_out_dir = 'D:\GitHub\Mars_fNIRS\Output\Pipeline_MergedEvents\GroupLevel';
 end
 if ~exist(group_out_dir, 'dir'), mkdir(group_out_dir); end
 
@@ -463,9 +451,9 @@ for ct = 1:length(contrast_types)
     for tn = 1:length(task_names)
         task_name = task_names{tn};
         
-        % Assign Timescale: Sustained (t = 0) vs Transient (t = 1)
-        if contains(lower(task_name), 'transient') || contains(lower(task_name), 'event') || ...
-           contains(lower(task_name), 'switch')    || contains(lower(task_name), 'probe')
+        transient_tasks = {'status_check', 'spam_pop_up', 'tricorder_switch', ...
+                   'certainty_individual', 'certainty_consensus'};
+        if ismember(lower(task_name), transient_tasks)
             timescale_name = "Transient";
             timescale_num  = 1;
         else
@@ -747,7 +735,7 @@ for c = 1:length(chroms)
                       Track1_Channel_Long_Table.Task_Contrast == task_str;
                   
             sub_tbl = Track1_Channel_Long_Table(sub_idx, :);
-            if height(sub_tbl) < 5, continue; end
+            % if height(sub_tbl) < 5, continue; end
             
             try
                 lme = fitlme(sub_tbl, 'Beta ~ 1 + (1 | Session_ID)');
@@ -802,7 +790,7 @@ for c = 1:length(chroms)
                       Track2_ROI_Long_Table.Task_Contrast == task_str;
                   
             sub_tbl = Track2_ROI_Long_Table(sub_idx, :);
-            if height(sub_tbl) < 5, continue; end
+            % if height(sub_tbl) < 5, continue; end
             
             try
                 lme = fitlme(sub_tbl, 'Beta_ROI ~ 1 + (1 | Session_ID)');
@@ -911,7 +899,21 @@ fprintf('\n--- Section F: Evaluating RQ1 Team Performance LME Models (Precision-
 
 primary_baseline = 'TaskMatched';
 rq1_chan_rows = {};
+rq1_chan_full_rows = {};
+full_chan_cols = { ...
+    'Baseline_Type', 'Task_Contrast', 'Timescale', 'Chromophore', ...
+    'Channel', 'Source', 'Detector', 'ROI', 'N_Obs', ...
+    'Effect_Type', 'Term', 'Estimate', 'SE', 'T_Stat', 'DF', 'P_Val', ...
+    'CI_Lower', 'CI_Upper', 'Partial_EtaSq_or_Var', 'ICC', 'Model_Status' ...
+};
+
 rq1_roi_rows  = {};
+rq1_roi_full_rows = {};
+full_roi_cols = { ...
+    'Baseline_Type', 'Task_Contrast', 'Timescale', 'Chromophore', 'ROI', 'N_Obs', ...
+    'Effect_Type', 'Term', 'Estimate', 'SE', 'T_Stat', 'DF', 'P_Val', ...
+    'CI_Lower', 'CI_Upper', 'Partial_EtaSq_or_Var', 'ICC', 'Model_Status' ...
+};
 
 chroms   = categories(Track1_Channel_Long_Table.Chromophore);
 channels = unique(Track1_Channel_Long_Table.Channel);
@@ -949,13 +951,13 @@ rq1_tasks = { ...
 chan_col_names = { ...
     'Baseline_Type', 'Task_Contrast', 'Timescale', 'Timescale_Num', ...
     'Chromophore', 'Channel', 'Source', 'Detector', 'ROI', 'N_Obs', ...
-    'Beta_TeamPerf', 'SE', 'T_Stat', 'DF', 'P_Val', 'CI_Lower', 'CI_Upper', 'Cohens_d' ...
+    'Beta_TeamPerf', 'SE', 'T_Stat', 'DF', 'P_Val', 'CI_Lower', 'CI_Upper', 'Cohens_d', 'Model_Status' ...
 };
 
 roi_col_names = { ...
     'Baseline_Type', 'Task_Contrast', 'Timescale', 'Timescale_Num', ...
     'Chromophore', 'ROI', 'N_Obs', 'Beta_TeamPerf', 'SE', 'T_Stat', 'DF', ...
-    'P_Val', 'CI_Lower', 'CI_Upper', 'Cohens_d' ...
+    'P_Val', 'CI_Lower', 'CI_Upper', 'Cohens_d', 'Model_Status' ...
 };
 
 %% -------------------------------------------------------------------------
@@ -972,33 +974,44 @@ for c = 1:length(chroms)
         
         for t = 1:length(rq1_tasks)
             task_str = rq1_tasks{t};
-            
-            % 1. Primary slice
+
             sub_idx = Track1_Channel_Long_Table.Baseline_Type == primary_baseline & ...
                       Track1_Channel_Long_Table.Chromophore == chrom_str & ...
                       Track1_Channel_Long_Table.Channel == chan_num & ...
                       Track1_Channel_Long_Table.Task_Contrast == task_str;
-                  
-            sub_tbl = Track1_Channel_Long_Table(sub_idx, :);
             
-            % 2. Extract complete cases across model variables
+            meta_idx = find(sub_idx, 1, 'first');
+            if isempty(meta_idx), continue; end
+            
+            sub_tbl = Track1_Channel_Long_Table(sub_idx, :);
             req_vars = {'Beta', 'SE', 'Team_Perf_Dummy', 'Age_Centered', 'Gender_Dummy', 'Second_Dest_Dummy', 'Session_ID'};
             sub_tbl  = sub_tbl(:, intersect(req_vars, sub_tbl.Properties.VariableNames));
             sub_tbl  = rmmissing(sub_tbl);
             
-            % if height(sub_tbl) < 10, continue; end
-            if numel(unique(sub_tbl.Team_Perf_Dummy)) < 2, continue; end
-            
-            % 3. Calculate numeric precision weights (w = 1 / SE^2)
-            raw_w = 1 ./ max(sub_tbl.SE .^ 2, 1e-6);
-            w_vec = raw_w / mean(raw_w);
-            
-            % 4. Drop unobserved categories
-            sub_tbl.Gender_Dummy      = removecats(categorical(sub_tbl.Gender_Dummy));
-            sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
-            sub_tbl.Session_ID        = removecats(categorical(sub_tbl.Session_ID));
+            base_meta_ch = { ...
+                string(primary_baseline), string(task_str), ...
+                string(Track1_Channel_Long_Table.Timescale(meta_idx)), ...
+                string(chrom_str), chan_num, ...
+                Track1_Channel_Long_Table.Source(meta_idx), ...
+                Track1_Channel_Long_Table.Detector(meta_idx), ...
+                string(Track1_Channel_Long_Table.ROI(meta_idx)), height(sub_tbl) ...
+            };
             
             try
+                if height(sub_tbl) == 0
+                    error('No valid observations remaining after rmmissing.');
+                end
+                if numel(unique(sub_tbl.Team_Perf_Dummy)) < 2
+                    error('Single outcome level (Team_Perf_Dummy has < 2 levels).');
+                end
+                
+                raw_w = 1 ./ max(sub_tbl.SE .^ 2, 1e-6);
+                w_vec = raw_w / mean(raw_w);
+                
+                sub_tbl.Gender_Dummy      = removecats(categorical(sub_tbl.Gender_Dummy));
+                sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
+                sub_tbl.Session_ID        = removecats(categorical(sub_tbl.Session_ID));
+                
                 if numel(categories(sub_tbl.Second_Dest_Dummy)) > 1
                     formula_str = 'Beta ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
                 else
@@ -1008,22 +1021,22 @@ for c = 1:length(chroms)
                 lme = fitlme(sub_tbl, formula_str, 'Weights', w_vec);
                 
                 team_idx = find(strcmp(lme.CoefficientNames, 'Team_Perf_Dummy'));
-                if isempty(team_idx), continue; end
+                if isempty(team_idx)
+                    error('Team_Perf_Dummy dropped due to collinearity.');
+                end
                 
-                b1    = lme.Coefficients.Estimate(team_idx);
-                se1   = lme.Coefficients.SE(team_idx);
-                tstat = lme.Coefficients.tStat(team_idx);
-                pval  = lme.Coefficients.pValue(team_idx);
-                df    = lme.Coefficients.DF(team_idx);
-                ci    = lme.coefCI;
-                ci_l  = ci(team_idx, 1);
-                ci_u  = ci(team_idx, 2);
-                
+                b1       = lme.Coefficients.Estimate(team_idx);
+                se1      = lme.Coefficients.SE(team_idx);
+                tstat    = lme.Coefficients.tStat(team_idx);
+                pval     = lme.Coefficients.pValue(team_idx);
+                df       = lme.Coefficients.DF(team_idx);
+                ci       = lme.coefCI;
+                ci_l     = ci(team_idx, 1);
+                ci_u     = ci(team_idx, 2);
                 cohens_d = tstat / sqrt(height(sub_tbl));
                 
-                % Metadata retrieval
-                meta_idx = find(sub_idx, 1, 'first');
-                rq1_chan_rows(end+1, 1:18) = { ...
+                rq1_chan_full_rows = extract_lme_full_terms(lme, base_meta_ch, rq1_chan_full_rows, "OK");
+                rq1_chan_rows(end+1, 1:19) = { ...
                     string(primary_baseline), string(task_str), ...
                     string(Track1_Channel_Long_Table.Timescale(meta_idx)), ...
                     Track1_Channel_Long_Table.Timescale_Num(meta_idx), ...
@@ -1031,11 +1044,100 @@ for c = 1:length(chroms)
                     Track1_Channel_Long_Table.Source(meta_idx), ...
                     Track1_Channel_Long_Table.Detector(meta_idx), ...
                     string(Track1_Channel_Long_Table.ROI(meta_idx)), height(sub_tbl), ...
-                    b1, se1, tstat, df, pval, ci_l, ci_u, cohens_d ...
+                    b1, se1, tstat, df, pval, ci_l, ci_u, cohens_d, "OK" ...
                 };
-            catch
-                % Silently skip ill-conditioned channel geometries
+            catch ME
+                status_msg = "Skipped: " + string(ME.message);
+                rq1_chan_rows(end+1, 1:19) = { ...
+                    string(primary_baseline), string(task_str), ...
+                    string(Track1_Channel_Long_Table.Timescale(meta_idx)), ...
+                    Track1_Channel_Long_Table.Timescale_Num(meta_idx), ...
+                    string(chrom_str), chan_num, ...
+                    Track1_Channel_Long_Table.Source(meta_idx), ...
+                    Track1_Channel_Long_Table.Detector(meta_idx), ...
+                    string(Track1_Channel_Long_Table.ROI(meta_idx)), height(sub_tbl), ...
+                    NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, status_msg ...
+                };
+                rq1_chan_full_rows(end+1, 1:21) = [base_meta_ch, { ...
+                    "Unestimated", "N/A", NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, status_msg ...
+                }];
             end
+            
+            % % 1. Primary slice
+            % sub_idx = Track1_Channel_Long_Table.Baseline_Type == primary_baseline & ...
+            %           Track1_Channel_Long_Table.Chromophore == chrom_str & ...
+            %           Track1_Channel_Long_Table.Channel == chan_num & ...
+            %           Track1_Channel_Long_Table.Task_Contrast == task_str;
+            % 
+            % sub_tbl = Track1_Channel_Long_Table(sub_idx, :);
+            % 
+            % % 2. Extract complete cases across model variables
+            % req_vars = {'Beta', 'SE', 'Team_Perf_Dummy', 'Age_Centered', 'Gender_Dummy', 'Second_Dest_Dummy', 'Session_ID'};
+            % sub_tbl  = sub_tbl(:, intersect(req_vars, sub_tbl.Properties.VariableNames));
+            % sub_tbl  = rmmissing(sub_tbl);
+            % 
+            % % Loops were skipping ptps with less than 10 or 2 N observed
+            % % for csvs and calcualtions because rank deficiency is going to
+            % % be an issue but I rather it be a reported issue.
+            % % if height(sub_tbl) < 10, continue; end
+            % % if numel(unique(sub_tbl.Team_Perf_Dummy)) < 2, continue; end
+            % 
+            % % 3. Calculate numeric precision weights (w = 1 / SE^2)
+            % raw_w = 1 ./ max(sub_tbl.SE .^ 2, 1e-6);
+            % w_vec = raw_w / mean(raw_w);
+            % 
+            % % 4. Drop unobserved categories
+            % sub_tbl.Gender_Dummy      = removecats(categorical(sub_tbl.Gender_Dummy));
+            % sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
+            % sub_tbl.Session_ID        = removecats(categorical(sub_tbl.Session_ID));
+            % 
+            % try
+            %     if numel(categories(sub_tbl.Second_Dest_Dummy)) > 1
+            %         formula_str = 'Beta ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+            %     else
+            %         formula_str = 'Beta ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+            %     end
+            % 
+            %     lme = fitlme(sub_tbl, formula_str, 'Weights', w_vec);
+            % 
+            %     team_idx = find(strcmp(lme.CoefficientNames, 'Team_Perf_Dummy'));
+            %     if isempty(team_idx), continue; end
+            % 
+            %     b1    = lme.Coefficients.Estimate(team_idx);
+            %     se1   = lme.Coefficients.SE(team_idx);
+            %     tstat = lme.Coefficients.tStat(team_idx);
+            %     pval  = lme.Coefficients.pValue(team_idx);
+            %     df    = lme.Coefficients.DF(team_idx);
+            %     ci    = lme.coefCI;
+            %     ci_l  = ci(team_idx, 1);
+            %     ci_u  = ci(team_idx, 2);
+            % 
+            %     cohens_d = tstat / sqrt(height(sub_tbl));
+            % 
+            %     % Metadata retrieval
+            %     meta_idx = find(sub_idx, 1, 'first');
+            %     base_meta_ch = { ...
+            %         string(primary_baseline), string(task_str), ...
+            %         string(Track1_Channel_Long_Table.Timescale(meta_idx)), ...
+            %         string(chrom_str), chan_num, ...
+            %         Track1_Channel_Long_Table.Source(meta_idx), ...
+            %         Track1_Channel_Long_Table.Detector(meta_idx), ...
+            %         string(Track1_Channel_Long_Table.ROI(meta_idx)), height(sub_tbl) ...
+            %     };
+            %     rq1_chan_full_rows = extract_lme_full_terms(lme, base_meta_ch, rq1_chan_full_rows);
+            %     rq1_chan_rows(end+1, 1:18) = { ...
+            %         string(primary_baseline), string(task_str), ...
+            %         string(Track1_Channel_Long_Table.Timescale(meta_idx)), ...
+            %         Track1_Channel_Long_Table.Timescale_Num(meta_idx), ...
+            %         string(chrom_str), chan_num, ...
+            %         Track1_Channel_Long_Table.Source(meta_idx), ...
+            %         Track1_Channel_Long_Table.Detector(meta_idx), ...
+            %         string(Track1_Channel_Long_Table.ROI(meta_idx)), height(sub_tbl), ...
+            %         b1, se1, tstat, df, pval, ci_l, ci_u, cohens_d ...
+            %     };
+            % catch
+            %     % Silently skip ill-conditioned channel geometries
+            % end
         end
     end
 end
@@ -1061,32 +1163,41 @@ for c = 1:length(chroms)
         
         for t = 1:length(rq1_tasks)
             task_str = rq1_tasks{t};
-            
+
             sub_idx = Track2_ROI_Long_Table.Baseline_Type == primary_baseline & ...
                       Track2_ROI_Long_Table.Chromophore == chrom_str & ...
                       Track2_ROI_Long_Table.ROI == roi_str & ...
                       Track2_ROI_Long_Table.Task_Contrast == task_str;
-                  
-            sub_tbl = Track2_ROI_Long_Table(sub_idx, :);
             
-            % Extract complete cases
+            meta_idx = find(sub_idx, 1, 'first');
+            if isempty(meta_idx), continue; end
+            
+            sub_tbl = Track2_ROI_Long_Table(sub_idx, :);
             req_vars = {'Beta_ROI', 'SE_ROI', 'Team_Perf_Dummy', 'Age_Centered', 'Gender_Dummy', 'Second_Dest_Dummy', 'Session_ID'};
             sub_tbl  = sub_tbl(:, intersect(req_vars, sub_tbl.Properties.VariableNames));
             sub_tbl  = rmmissing(sub_tbl);
             
-            % if height(sub_tbl) < 10, continue; end
-            if numel(unique(sub_tbl.Team_Perf_Dummy)) < 2, continue; end
-            
-            % Calculate numeric precision weights (w = 1 / SE_ROI^2)
-            raw_w = 1 ./ max(sub_tbl.SE_ROI .^ 2, 1e-6);
-            w_vec = raw_w / mean(raw_w);
-            
-            % Drop unobserved categories
-            sub_tbl.Gender_Dummy      = removecats(categorical(sub_tbl.Gender_Dummy));
-            sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
-            sub_tbl.Session_ID        = removecats(categorical(sub_tbl.Session_ID));
+            base_meta = { ...
+                string(primary_baseline), string(task_str), ...
+                string(Track2_ROI_Long_Table.Timescale(meta_idx)), ...
+                string(chrom_str), string(roi_str), height(sub_tbl) ...
+            };
             
             try
+                if height(sub_tbl) == 0
+                    error('No valid observations remaining after rmmissing.');
+                end
+                if numel(unique(sub_tbl.Team_Perf_Dummy)) < 2
+                    error('Single outcome level (Team_Perf_Dummy has < 2 levels).');
+                end
+                
+                raw_w = 1 ./ max(sub_tbl.SE_ROI .^ 2, 1e-6);
+                w_vec = raw_w / mean(raw_w);
+                
+                sub_tbl.Gender_Dummy      = removecats(categorical(sub_tbl.Gender_Dummy));
+                sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
+                sub_tbl.Session_ID        = removecats(categorical(sub_tbl.Session_ID));
+                
                 if numel(categories(sub_tbl.Second_Dest_Dummy)) > 1
                     formula_str = 'Beta_ROI ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
                 else
@@ -1096,30 +1207,109 @@ for c = 1:length(chroms)
                 lme = fitlme(sub_tbl, formula_str, 'Weights', w_vec);
                 
                 team_idx = find(strcmp(lme.CoefficientNames, 'Team_Perf_Dummy'));
-                if isempty(team_idx), continue; end
+                if isempty(team_idx)
+                    error('Team_Perf_Dummy dropped due to collinearity.');
+                end
                 
-                b1    = lme.Coefficients.Estimate(team_idx);
-                se1   = lme.Coefficients.SE(team_idx);
-                tstat = lme.Coefficients.tStat(team_idx);
-                pval  = lme.Coefficients.pValue(team_idx);
-                df    = lme.Coefficients.DF(team_idx);
-                ci    = lme.coefCI;
-                ci_l  = ci(team_idx, 1);
-                ci_u  = ci(team_idx, 2);
-                
+                b1       = lme.Coefficients.Estimate(team_idx);
+                se1      = lme.Coefficients.SE(team_idx);
+                tstat    = lme.Coefficients.tStat(team_idx);
+                pval     = lme.Coefficients.pValue(team_idx);
+                df       = lme.Coefficients.DF(team_idx);
+                ci       = lme.coefCI;
+                ci_l     = ci(team_idx, 1);
+                ci_u     = ci(team_idx, 2);
                 cohens_d = tstat / sqrt(height(sub_tbl));
                 
-                meta_idx = find(sub_idx, 1, 'first');
-                rq1_roi_rows(end+1, 1:15) = { ...
+                rq1_roi_full_rows = extract_lme_full_terms(lme, base_meta, rq1_roi_full_rows, "OK");
+                rq1_roi_rows(end+1, 1:16) = { ...
                     string(primary_baseline), string(task_str), ...
                     string(Track2_ROI_Long_Table.Timescale(meta_idx)), ...
                     Track2_ROI_Long_Table.Timescale_Num(meta_idx), ...
                     string(chrom_str), string(roi_str), height(sub_tbl), ...
-                    b1, se1, tstat, df, pval, ci_l, ci_u, cohens_d ...
+                    b1, se1, tstat, df, pval, ci_l, ci_u, cohens_d, "OK" ...
                 };
             catch ME
-                warning('RQ1 ROI model failed for [%s - %s - %s]: %s', chrom_str, roi_str, task_str, ME.message);
+                status_msg = "Skipped: " + string(ME.message);
+                rq1_roi_rows(end+1, 1:16) = { ...
+                    string(primary_baseline), string(task_str), ...
+                    string(Track2_ROI_Long_Table.Timescale(meta_idx)), ...
+                    Track2_ROI_Long_Table.Timescale_Num(meta_idx), ...
+                    string(chrom_str), string(roi_str), height(sub_tbl), ...
+                    NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, status_msg ...
+                };
+                rq1_roi_full_rows(end+1, 1:18) = [base_meta, { ...
+                    "Unestimated", "N/A", NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, status_msg ...
+                }];
             end
+            
+            % sub_idx = Track2_ROI_Long_Table.Baseline_Type == primary_baseline & ...
+            %           Track2_ROI_Long_Table.Chromophore == chrom_str & ...
+            %           Track2_ROI_Long_Table.ROI == roi_str & ...
+            %           Track2_ROI_Long_Table.Task_Contrast == task_str;
+            % 
+            % sub_tbl = Track2_ROI_Long_Table(sub_idx, :);
+            % 
+            % % Extract complete cases
+            % req_vars = {'Beta_ROI', 'SE_ROI', 'Team_Perf_Dummy', 'Age_Centered', 'Gender_Dummy', 'Second_Dest_Dummy', 'Session_ID'};
+            % sub_tbl  = sub_tbl(:, intersect(req_vars, sub_tbl.Properties.VariableNames));
+            % sub_tbl  = rmmissing(sub_tbl);
+            % 
+            % % Loops were skipping ptps with less than 10 or 2 N observed
+            % % for csvs and calcualtions because rank deficiency is going to
+            % % be an issue but I rather it be a reported issue.
+            % % if height(sub_tbl) < 10, continue; end
+            % % if numel(unique(sub_tbl.Team_Perf_Dummy)) < 2, continue; end
+            % 
+            % % Calculate numeric precision weights (w = 1 / SE_ROI^2)
+            % raw_w = 1 ./ max(sub_tbl.SE_ROI .^ 2, 1e-6);
+            % w_vec = raw_w / mean(raw_w);
+            % 
+            % % Drop unobserved categories
+            % sub_tbl.Gender_Dummy      = removecats(categorical(sub_tbl.Gender_Dummy));
+            % sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
+            % sub_tbl.Session_ID        = removecats(categorical(sub_tbl.Session_ID));
+            % 
+            % try
+            %     if numel(categories(sub_tbl.Second_Dest_Dummy)) > 1
+            %         formula_str = 'Beta_ROI ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+            %     else
+            %         formula_str = 'Beta_ROI ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+            %     end
+            % 
+            %     lme = fitlme(sub_tbl, formula_str, 'Weights', w_vec);
+            % 
+            %     team_idx = find(strcmp(lme.CoefficientNames, 'Team_Perf_Dummy'));
+            %     if isempty(team_idx), continue; end
+            % 
+            %     b1    = lme.Coefficients.Estimate(team_idx);
+            %     se1   = lme.Coefficients.SE(team_idx);
+            %     tstat = lme.Coefficients.tStat(team_idx);
+            %     pval  = lme.Coefficients.pValue(team_idx);
+            %     df    = lme.Coefficients.DF(team_idx);
+            %     ci    = lme.coefCI;
+            %     ci_l  = ci(team_idx, 1);
+            %     ci_u  = ci(team_idx, 2);
+            % 
+            %     cohens_d = tstat / sqrt(height(sub_tbl));
+            % 
+            %     meta_idx = find(sub_idx, 1, 'first');
+            %     base_meta = { ...
+            %         string(primary_baseline), string(task_str), ...
+            %         string(Track2_ROI_Long_Table.Timescale(meta_idx)), ...
+            %         string(chrom_str), string(roi_str), height(sub_tbl) ...
+            %     };
+            %     rq1_roi_full_rows = extract_lme_full_terms(lme, base_meta, rq1_roi_full_rows);
+            %     rq1_roi_rows(end+1, 1:15) = { ...
+            %         string(primary_baseline), string(task_str), ...
+            %         string(Track2_ROI_Long_Table.Timescale(meta_idx)), ...
+            %         Track2_ROI_Long_Table.Timescale_Num(meta_idx), ...
+            %         string(chrom_str), string(roi_str), height(sub_tbl), ...
+            %         b1, se1, tstat, df, pval, ci_l, ci_u, cohens_d ...
+            %     };
+            % catch ME
+            %     warning('RQ1 ROI model failed for [%s - %s - %s]: %s', chrom_str, roi_str, task_str, ME.message);
+            % end
         end
     end
 end
@@ -1134,27 +1324,30 @@ end
 Table_RQ1_ROI.P_FDR   = nan(height(Table_RQ1_ROI), 1);
 Table_RQ1_ROI.Sig_FDR = false(height(Table_RQ1_ROI), 1);
 
-for c = 1:length(chroms)
-    c_idx = Table_RQ1_ROI.Chromophore == chroms{c};
-    p_raw = Table_RQ1_ROI.P_Val(c_idx);
-    
-    if ~isempty(p_raw)
-        [p_sorted, sort_order] = sort(p_raw, 'ascend');
-        m = length(p_raw);
-        q_sorted = p_sorted .* (m ./ (1:m)');
+if ~isempty(Table_RQ1_ROI)
+    for c = 1:length(chroms)
+        c_idx = Table_RQ1_ROI.Chromophore == string(chroms{c});
+        p_raw = Table_RQ1_ROI.P_Val(c_idx);
         
-        for k = m-1:-1:1
-            q_sorted(k) = min(q_sorted(k), q_sorted(k+1));
+        if ~isempty(p_raw)
+            [p_sorted, sort_order] = sort(p_raw, 'ascend');
+            m = length(p_raw);
+            q_sorted = p_sorted .* (m ./ (1:m)');
+            
+            for k = m-1:-1:1
+                q_sorted(k) = min(q_sorted(k), q_sorted(k+1));
+            end
+            q_sorted = min(q_sorted, 1);
+            
+            q_adj = zeros(size(p_raw));
+            q_adj(sort_order) = q_sorted;
+            
+            Table_RQ1_ROI.P_FDR(c_idx)   = q_adj;
+            Table_RQ1_ROI.Sig_FDR(c_idx) = (q_adj < 0.05);
         end
-        q_sorted = min(q_sorted, 1);
-        
-        q_adj = zeros(size(p_raw));
-        q_adj(sort_order) = q_sorted;
-        
-        Table_RQ1_ROI.P_FDR(c_idx)   = q_adj;
-        Table_RQ1_ROI.Sig_FDR(c_idx) = (q_adj < 0.05);
     end
 end
+
 fprintf('Track 2 RQ1 ROI complete: %d models evaluated.\n', height(Table_RQ1_ROI));
 
 %% -------------------------------------------------------------------------
@@ -1169,6 +1362,26 @@ writetable(Table_RQ1_ROI, rq1_roi_csv);
 save(rq1_mat, 'Table_RQ1_Channels', 'Table_RQ1_ROI');
 fprintf('Section F complete. Saved RQ1 deliverables to:\n  -> %s\n  -> %s\n  -> %s\n', ...
     rq1_chan_csv, rq1_roi_csv, rq1_mat);
+
+% Table_RQ1_Channels_FullTerms = cell2table(rq1_chan_full_rows, 'VariableNames', full_chan_cols);
+% writetable(Table_RQ1_Channels_FullTerms, fullfile(group_out_dir, 'Table_RQ1_FullModel_Covariates_Channels.csv'));
+
+if isempty(rq1_chan_full_rows)
+    Table_RQ1_Channels_FullTerms = cell2table(cell(0, length(full_chan_cols)), 'VariableNames', full_chan_cols);
+else
+    Table_RQ1_Channels_FullTerms = cell2table(rq1_chan_full_rows, 'VariableNames', full_chan_cols);
+end
+writetable(Table_RQ1_Channels_FullTerms, fullfile(group_out_dir, 'Table_RQ1_FullModel_Covariates_Channels.csv'));
+
+% Table_RQ1_ROI_FullTerms = cell2table(rq1_roi_full_rows, 'VariableNames', full_roi_cols);
+% writetable(Table_RQ1_ROI_FullTerms, fullfile(group_out_dir, 'Table_RQ1_FullModel_Covariates_ROI.csv'));
+
+if isempty(rq1_roi_full_rows)
+    Table_RQ1_ROI_FullTerms = cell2table(cell(0, length(full_roi_cols)), 'VariableNames', full_roi_cols);
+else
+    Table_RQ1_ROI_FullTerms = cell2table(rq1_roi_full_rows, 'VariableNames', full_roi_cols);
+end
+writetable(Table_RQ1_ROI_FullTerms, fullfile(group_out_dir, 'Table_RQ1_FullModel_Covariates_ROI.csv'));
 
 % Summary display of uncorrected and FDR-significant ROI findings with CIs
 sig_uncorr = Table_RQ1_ROI(Table_RQ1_ROI.P_Val < 0.05, :);
@@ -1279,33 +1492,35 @@ tasks  = categories(categorical(Table_RQ1_Channels_Pub.Condition_Contrast));
 
 Table_RQ1_Channels_Pub.p_FDR = nan(height(Table_RQ1_Channels_Pub), 1);
 
-for c = 1:length(chroms)
-    c_str = chroms{c};
-    
-    for t = 1:length(tasks)
-        t_str = tasks{t};
+if ~isempty(Table_RQ1_Channels_Pub)
+    for c = 1:length(chroms)
+        c_str = string(chroms{c});
         
-        % Family slice: All channels within this specific task and chromophore
-        slice_idx = Table_RQ1_Channels_Pub.Chromophore == c_str & ...
-                    Table_RQ1_Channels_Pub.Condition_Contrast == t_str;
+        for t = 1:length(tasks)
+            t_str = tasks{t};
+            
+            % Family slice: All channels within this specific task and chromophore
+            slice_idx = Table_RQ1_Channels_Pub.Chromophore == c_str & ...
+                        Table_RQ1_Channels_Pub.Condition_Contrast == t_str;
+                    
+            p_raw = Table_RQ1_Channels_Pub.p(slice_idx);
+            
+            if ~isempty(p_raw)
+                [p_sorted, sort_order] = sort(p_raw, 'ascend');
+                m = length(p_raw); % m <= 41
+                q_sorted = p_sorted .* (m ./ (1:m)');
                 
-        p_raw = Table_RQ1_Channels_Pub.p(slice_idx);
-        
-        if ~isempty(p_raw)
-            [p_sorted, sort_order] = sort(p_raw, 'ascend');
-            m = length(p_raw); % m <= 41
-            q_sorted = p_sorted .* (m ./ (1:m)');
-            
-            % Enforce monotonicity
-            for k = m-1:-1:1
-                q_sorted(k) = min(q_sorted(k), q_sorted(k+1));
+                % Enforce monotonicity
+                for k = m-1:-1:1
+                    q_sorted(k) = min(q_sorted(k), q_sorted(k+1));
+                end
+                q_sorted = min(q_sorted, 1);
+                
+                q_adj = zeros(size(p_raw));
+                q_adj(sort_order) = q_sorted;
+                
+                Table_RQ1_Channels_Pub.p_FDR(slice_idx) = q_adj;
             end
-            q_sorted = min(q_sorted, 1);
-            
-            q_adj = zeros(size(p_raw));
-            q_adj(sort_order) = q_sorted;
-            
-            Table_RQ1_Channels_Pub.p_FDR(slice_idx) = q_adj;
         end
     end
 end
@@ -1521,7 +1736,9 @@ fprintf('\n--- Section G: Evaluating RQ2 Certainty LME Models (Maximum Likelihoo
 
 primary_baseline = 'TaskMatched';
 rq2_chan_rows = {};
+rq2_chan_full_rows = {};
 rq2_roi_rows  = {};
+rq2_roi_full_rows = {};
 
 chroms   = categories(Track1_Channel_Long_Table.Chromophore);
 channels = unique(Track1_Channel_Long_Table.Channel);
@@ -1550,7 +1767,7 @@ chan_col_names_rq2 = { ...
     'Chromophore', 'Channel', 'Source', 'Detector', 'ROI', 'N_Obs', ...
     'Beta_SC', 'SE_SC', 'T_Stat_SC', 'DF_SC', 'P_Val_SC', 'CI_Lower_SC', 'CI_Upper_SC', ...
     'Beta_Time', 'P_Val_Time', ...
-    'AIC_M1_Signed', 'AIC_M2_Unsigned', 'AIC_M3_Dual', 'Delta_AIC_M2_M1', 'Delta_AIC_M3_M1' ...
+    'AIC_M1_Signed', 'AIC_M2_Unsigned', 'AIC_M3_Dual', 'Delta_AIC_M2_M1', 'Delta_AIC_M3_M1', 'Model_Status' ...
 };
 
 roi_col_names_rq2 = { ...
@@ -1558,7 +1775,7 @@ roi_col_names_rq2 = { ...
     'Chromophore', 'ROI', 'N_Obs', ...
     'Beta_SC', 'SE_SC', 'T_Stat_SC', 'DF_SC', 'P_Val_SC', 'CI_Lower_SC', 'CI_Upper_SC', ...
     'Beta_Time', 'P_Val_Time', ...
-    'AIC_M1_Signed', 'AIC_M2_Unsigned', 'AIC_M3_Dual', 'Delta_AIC_M2_M1', 'Delta_AIC_M3_M1' ...
+    'AIC_M1_Signed', 'AIC_M2_Unsigned', 'AIC_M3_Dual', 'Delta_AIC_M2_M1', 'Delta_AIC_M3_M1', 'Model_Status' ...
 };
 
 %% -------------------------------------------------------------------------
@@ -1575,34 +1792,46 @@ for c = 1:length(chroms)
         
         for t = 1:length(rq2_tasks)
             task_str = rq2_tasks{t};
-            
+
             sub_idx = Track1_Channel_Long_Table.Baseline_Type == primary_baseline & ...
                       Track1_Channel_Long_Table.Chromophore == chrom_str & ...
                       Track1_Channel_Long_Table.Channel == chan_num & ...
                       Track1_Channel_Long_Table.Task_Contrast == task_str;
-                  
-            sub_tbl = Track1_Channel_Long_Table(sub_idx, :);
             
+            meta_idx = find(sub_idx, 1, 'first');
+            if isempty(meta_idx), continue; end
+            
+            sub_tbl = Track1_Channel_Long_Table(sub_idx, :);
             req_vars = {'Beta', 'SE', 'SC_Centered', 'Certainty_Centered', 'Time_Centered', ...
                         'Age_Centered', 'Gender_Dummy', 'Second_Dest_Dummy', 'Session_ID'};
             sub_tbl  = sub_tbl(:, intersect(req_vars, sub_tbl.Properties.VariableNames));
             sub_tbl  = rmmissing(sub_tbl);
             
-            % if height(sub_tbl) < 10, continue; end
-            if numel(unique(sub_tbl.SC_Centered)) < 3, continue; end
-            
-            % Precision weights normalized to mean 1
-            raw_w = 1 ./ max(sub_tbl.SE .^ 2, 1e-6);
-            w_vec = raw_w / mean(raw_w);
-            
-            sub_tbl.Gender_Dummy      = removecats(categorical(sub_tbl.Gender_Dummy));
-            sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
-            sub_tbl.Session_ID        = removecats(categorical(sub_tbl.Session_ID));
-            
-            has_second = numel(categories(sub_tbl.Second_Dest_Dummy)) > 1;
+            base_meta_ch = { ...
+                string(primary_baseline), string(task_str), ...
+                string(Track1_Channel_Long_Table.Timescale(meta_idx)), ...
+                string(chrom_str), chan_num, ...
+                Track1_Channel_Long_Table.Source(meta_idx), ...
+                Track1_Channel_Long_Table.Detector(meta_idx), ...
+                string(Track1_Channel_Long_Table.ROI(meta_idx)), height(sub_tbl) ...
+            };
             
             try
-                % Dynamic formulas to handle conditions with single Second_Dest level
+                if height(sub_tbl) == 0
+                    error('No valid observations remaining after rmmissing.');
+                end
+                if numel(unique(sub_tbl.SC_Centered)) < 3
+                    error('Fewer than 3 unique SC_Centered values.');
+                end
+                
+                raw_w = 1 ./ max(sub_tbl.SE .^ 2, 1e-6);
+                w_vec = raw_w / mean(raw_w);
+                
+                sub_tbl.Gender_Dummy      = removecats(categorical(sub_tbl.Gender_Dummy));
+                sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
+                sub_tbl.Session_ID        = removecats(categorical(sub_tbl.Session_ID));
+                
+                has_second = numel(categories(sub_tbl.Second_Dest_Dummy)) > 1;
                 if has_second
                     f1 = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
                     f2 = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
@@ -1613,13 +1842,14 @@ for c = 1:length(chroms)
                     f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
                 end
                 
-                % Must fit via Maximum Likelihood ('ML') for AIC comparison across non-nested fixed effects
                 lme1 = fitlme(sub_tbl, f1, 'Weights', w_vec, 'FitMethod', 'ML');
                 lme2 = fitlme(sub_tbl, f2, 'Weights', w_vec, 'FitMethod', 'ML');
                 lme3 = fitlme(sub_tbl, f3, 'Weights', w_vec, 'FitMethod', 'ML');
                 
                 sc_idx = find(strcmp(lme1.CoefficientNames, 'SC_Centered'));
-                if isempty(sc_idx), continue; end
+                if isempty(sc_idx)
+                    error('SC_Centered dropped due to collinearity.');
+                end
                 
                 b_sc    = lme1.Coefficients.Estimate(sc_idx);
                 se_sc   = lme1.Coefficients.SE(sc_idx);
@@ -1638,15 +1868,14 @@ for c = 1:length(chroms)
                     b_time = nan; p_time = nan;
                 end
                 
-                % Information criteria extraction
-                aic1 = lme1.ModelCriterion.AIC;
-                aic2 = lme2.ModelCriterion.AIC;
-                aic3 = lme3.ModelCriterion.AIC;
+                aic1  = lme1.ModelCriterion.AIC;
+                aic2  = lme2.ModelCriterion.AIC;
+                aic3  = lme3.ModelCriterion.AIC;
                 daic2 = aic2 - aic1;
                 daic3 = aic3 - aic1;
                 
-                meta_idx = find(sub_idx, 1, 'first');
-                rq2_chan_rows(end+1, 1:24) = { ...
+                rq2_chan_full_rows = extract_lme_full_terms(lme1, base_meta_ch, rq2_chan_full_rows, "OK");
+                rq2_chan_rows(end+1, 1:25) = { ...
                     string(primary_baseline), string(task_str), ...
                     string(Track1_Channel_Long_Table.Timescale(meta_idx)), ...
                     Track1_Channel_Long_Table.Timescale_Num(meta_idx), ...
@@ -1655,11 +1884,122 @@ for c = 1:length(chroms)
                     Track1_Channel_Long_Table.Detector(meta_idx), ...
                     string(Track1_Channel_Long_Table.ROI(meta_idx)), height(sub_tbl), ...
                     b_sc, se_sc, t_sc, df_sc, p_sc, ci_l_sc, ci_u_sc, ...
-                    b_time, p_time, aic1, aic2, aic3, daic2, daic3 ...
+                    b_time, p_time, aic1, aic2, aic3, daic2, daic3, "OK" ...
                 };
-            catch
-                % Silently skip ill-conditioned models
+            catch ME
+                status_msg = "Skipped: " + string(ME.message);
+                rq2_chan_rows(end+1, 1:25) = { ...
+                    string(primary_baseline), string(task_str), ...
+                    string(Track1_Channel_Long_Table.Timescale(meta_idx)), ...
+                    Track1_Channel_Long_Table.Timescale_Num(meta_idx), ...
+                    string(chrom_str), chan_num, ...
+                    Track1_Channel_Long_Table.Source(meta_idx), ...
+                    Track1_Channel_Long_Table.Detector(meta_idx), ...
+                    string(Track1_Channel_Long_Table.ROI(meta_idx)), height(sub_tbl), ...
+                    NaN, NaN, NaN, NaN, NaN, NaN, NaN, ...
+                    NaN, NaN, NaN, NaN, NaN, NaN, NaN, status_msg ...
+                };
+                rq2_chan_full_rows(end+1, 1:21) = [base_meta_ch, { ...
+                    "Unestimated", "N/A", NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, status_msg ...
+                }];
             end
+            
+            % sub_idx = Track1_Channel_Long_Table.Baseline_Type == primary_baseline & ...
+            %           Track1_Channel_Long_Table.Chromophore == chrom_str & ...
+            %           Track1_Channel_Long_Table.Channel == chan_num & ...
+            %           Track1_Channel_Long_Table.Task_Contrast == task_str;
+            % 
+            % sub_tbl = Track1_Channel_Long_Table(sub_idx, :);
+            % 
+            % req_vars = {'Beta', 'SE', 'SC_Centered', 'Certainty_Centered', 'Time_Centered', ...
+            %             'Age_Centered', 'Gender_Dummy', 'Second_Dest_Dummy', 'Session_ID'};
+            % sub_tbl  = sub_tbl(:, intersect(req_vars, sub_tbl.Properties.VariableNames));
+            % sub_tbl  = rmmissing(sub_tbl);
+            % 
+            % % Loops were skipping ptps with less than 10 or 2 N observed
+            % % for csvs and calcualtions because rank deficiency is going to
+            % % be an issue but I rather it be a reported issue.
+            % % if height(sub_tbl) < 10, continue; end
+            % % if numel(unique(sub_tbl.SC_Centered)) < 3, continue; end
+            % 
+            % % Precision weights normalized to mean 1
+            % raw_w = 1 ./ max(sub_tbl.SE .^ 2, 1e-6);
+            % w_vec = raw_w / mean(raw_w);
+            % 
+            % sub_tbl.Gender_Dummy      = removecats(categorical(sub_tbl.Gender_Dummy));
+            % sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
+            % sub_tbl.Session_ID        = removecats(categorical(sub_tbl.Session_ID));
+            % 
+            % has_second = numel(categories(sub_tbl.Second_Dest_Dummy)) > 1;
+            % 
+            % try
+            %     % Dynamic formulas to handle conditions with single Second_Dest level
+            %     if has_second
+            %         f1 = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+            %         f2 = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+            %         f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+            %     else
+            %         f1 = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+            %         f2 = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+            %         f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+            %     end
+            % 
+            %     % Must fit via Maximum Likelihood ('ML') for AIC comparison across non-nested fixed effects
+            %     lme1 = fitlme(sub_tbl, f1, 'Weights', w_vec, 'FitMethod', 'ML');
+            %     lme2 = fitlme(sub_tbl, f2, 'Weights', w_vec, 'FitMethod', 'ML');
+            %     lme3 = fitlme(sub_tbl, f3, 'Weights', w_vec, 'FitMethod', 'ML');
+            % 
+            %     sc_idx = find(strcmp(lme1.CoefficientNames, 'SC_Centered'));
+            %     if isempty(sc_idx), continue; end
+            % 
+            %     b_sc    = lme1.Coefficients.Estimate(sc_idx);
+            %     se_sc   = lme1.Coefficients.SE(sc_idx);
+            %     t_sc    = lme1.Coefficients.tStat(sc_idx);
+            %     p_sc    = lme1.Coefficients.pValue(sc_idx);
+            %     df_sc   = lme1.Coefficients.DF(sc_idx);
+            %     ci_sc   = lme1.coefCI;
+            %     ci_l_sc = ci_sc(sc_idx, 1);
+            %     ci_u_sc = ci_sc(sc_idx, 2);
+            % 
+            %     time_idx = find(strcmp(lme1.CoefficientNames, 'Time_Centered'));
+            %     if ~isempty(time_idx)
+            %         b_time = lme1.Coefficients.Estimate(time_idx);
+            %         p_time = lme1.Coefficients.pValue(time_idx);
+            %     else
+            %         b_time = nan; p_time = nan;
+            %     end
+            % 
+            %     % Information criteria extraction
+            %     aic1 = lme1.ModelCriterion.AIC;
+            %     aic2 = lme2.ModelCriterion.AIC;
+            %     aic3 = lme3.ModelCriterion.AIC;
+            %     daic2 = aic2 - aic1;
+            %     daic3 = aic3 - aic1;
+            % 
+            %     meta_idx = find(sub_idx, 1, 'first');
+            %     base_meta_ch = { ...
+            %         string(primary_baseline), string(task_str), ...
+            %         string(Track1_Channel_Long_Table.Timescale(meta_idx)), ...
+            %         string(chrom_str), chan_num, ...
+            %         Track1_Channel_Long_Table.Source(meta_idx), ...
+            %         Track1_Channel_Long_Table.Detector(meta_idx), ...
+            %         string(Track1_Channel_Long_Table.ROI(meta_idx)), height(sub_tbl) ...
+            %     };
+            %     rq2_chan_full_rows = extract_lme_full_terms(lme1, base_meta_ch, rq2_chan_full_rows);
+            %     rq2_chan_rows(end+1, 1:24) = { ...
+            %         string(primary_baseline), string(task_str), ...
+            %         string(Track1_Channel_Long_Table.Timescale(meta_idx)), ...
+            %         Track1_Channel_Long_Table.Timescale_Num(meta_idx), ...
+            %         string(chrom_str), chan_num, ...
+            %         Track1_Channel_Long_Table.Source(meta_idx), ...
+            %         Track1_Channel_Long_Table.Detector(meta_idx), ...
+            %         string(Track1_Channel_Long_Table.ROI(meta_idx)), height(sub_tbl), ...
+            %         b_sc, se_sc, t_sc, df_sc, p_sc, ci_l_sc, ci_u_sc, ...
+            %         b_time, p_time, aic1, aic2, aic3, daic2, daic3 ...
+            %     };
+            % catch
+            %     % Silently skip ill-conditioned models
+            % end
         end
     end
 end
@@ -1685,32 +2025,43 @@ for c = 1:length(chroms)
         
         for t = 1:length(rq2_tasks)
             task_str = rq2_tasks{t};
-            
+
             sub_idx = Track2_ROI_Long_Table.Baseline_Type == primary_baseline & ...
                       Track2_ROI_Long_Table.Chromophore == chrom_str & ...
                       Track2_ROI_Long_Table.ROI == roi_str & ...
                       Track2_ROI_Long_Table.Task_Contrast == task_str;
-                  
-            sub_tbl = Track2_ROI_Long_Table(sub_idx, :);
             
+            meta_idx = find(sub_idx, 1, 'first');
+            if isempty(meta_idx), continue; end
+            
+            sub_tbl = Track2_ROI_Long_Table(sub_idx, :);
             req_vars = {'Beta_ROI', 'SE_ROI', 'SC_Centered', 'Certainty_Centered', 'Time_Centered', ...
                         'Age_Centered', 'Gender_Dummy', 'Second_Dest_Dummy', 'Session_ID'};
             sub_tbl  = sub_tbl(:, intersect(req_vars, sub_tbl.Properties.VariableNames));
             sub_tbl  = rmmissing(sub_tbl);
             
-            % if height(sub_tbl) < 10, continue; end
-            if numel(unique(sub_tbl.SC_Centered)) < 3, continue; end
-            
-            raw_w = 1 ./ max(sub_tbl.SE_ROI .^ 2, 1e-6);
-            w_vec = raw_w / mean(raw_w);
-            
-            sub_tbl.Gender_Dummy      = removecats(categorical(sub_tbl.Gender_Dummy));
-            sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
-            sub_tbl.Session_ID        = removecats(categorical(sub_tbl.Session_ID));
-            
-            has_second = numel(categories(sub_tbl.Second_Dest_Dummy)) > 1;
+            base_meta = { ...
+                string(primary_baseline), string(task_str), ...
+                string(Track2_ROI_Long_Table.Timescale(meta_idx)), ...
+                string(chrom_str), string(roi_str), height(sub_tbl) ...
+            };
             
             try
+                if height(sub_tbl) == 0
+                    error('No valid observations remaining after rmmissing.');
+                end
+                if numel(unique(sub_tbl.SC_Centered)) < 3
+                    error('Fewer than 3 unique SC_Centered values.');
+                end
+                
+                raw_w = 1 ./ max(sub_tbl.SE_ROI .^ 2, 1e-6);
+                w_vec = raw_w / mean(raw_w);
+                
+                sub_tbl.Gender_Dummy      = removecats(categorical(sub_tbl.Gender_Dummy));
+                sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
+                sub_tbl.Session_ID        = removecats(categorical(sub_tbl.Session_ID));
+                
+                has_second = numel(categories(sub_tbl.Second_Dest_Dummy)) > 1;
                 if has_second
                     f1 = 'Beta_ROI ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
                     f2 = 'Beta_ROI ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
@@ -1726,7 +2077,9 @@ for c = 1:length(chroms)
                 lme3 = fitlme(sub_tbl, f3, 'Weights', w_vec, 'FitMethod', 'ML');
                 
                 sc_idx = find(strcmp(lme1.CoefficientNames, 'SC_Centered'));
-                if isempty(sc_idx), continue; end
+                if isempty(sc_idx)
+                    error('SC_Centered dropped due to collinearity.');
+                end
                 
                 b_sc    = lme1.Coefficients.Estimate(sc_idx);
                 se_sc   = lme1.Coefficients.SE(sc_idx);
@@ -1745,24 +2098,122 @@ for c = 1:length(chroms)
                     b_time = nan; p_time = nan;
                 end
                 
-                aic1 = lme1.ModelCriterion.AIC;
-                aic2 = lme2.ModelCriterion.AIC;
-                aic3 = lme3.ModelCriterion.AIC;
+                aic1  = lme1.ModelCriterion.AIC;
+                aic2  = lme2.ModelCriterion.AIC;
+                aic3  = lme3.ModelCriterion.AIC;
                 daic2 = aic2 - aic1;
                 daic3 = aic3 - aic1;
                 
-                meta_idx = find(sub_idx, 1, 'first');
-                rq2_roi_rows(end+1, 1:21) = { ...
+                rq2_roi_full_rows = extract_lme_full_terms(lme1, base_meta, rq2_roi_full_rows, "OK");
+                rq2_roi_rows(end+1, 1:22) = { ...
                     string(primary_baseline), string(task_str), ...
                     string(Track2_ROI_Long_Table.Timescale(meta_idx)), ...
                     Track2_ROI_Long_Table.Timescale_Num(meta_idx), ...
                     string(chrom_str), string(roi_str), height(sub_tbl), ...
                     b_sc, se_sc, t_sc, df_sc, p_sc, ci_l_sc, ci_u_sc, ...
-                    b_time, p_time, aic1, aic2, aic3, daic2, daic3 ...
+                    b_time, p_time, aic1, aic2, aic3, daic2, daic3, "OK" ...
                 };
             catch ME
-                warning('RQ2 ROI model failed for [%s - %s - %s]: %s', chrom_str, roi_str, task_str, ME.message);
+                status_msg = "Skipped: " + string(ME.message);
+                rq2_roi_rows(end+1, 1:22) = { ...
+                    string(primary_baseline), string(task_str), ...
+                    string(Track2_ROI_Long_Table.Timescale(meta_idx)), ...
+                    Track2_ROI_Long_Table.Timescale_Num(meta_idx), ...
+                    string(chrom_str), string(roi_str), height(sub_tbl), ...
+                    NaN, NaN, NaN, NaN, NaN, NaN, NaN, ...
+                    NaN, NaN, NaN, NaN, NaN, NaN, NaN, status_msg ...
+                };
+                rq2_roi_full_rows(end+1, 1:18) = [base_meta, { ...
+                    "Unestimated", "N/A", NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, status_msg ...
+                }];
             end
+            
+            % sub_idx = Track2_ROI_Long_Table.Baseline_Type == primary_baseline & ...
+            %           Track2_ROI_Long_Table.Chromophore == chrom_str & ...
+            %           Track2_ROI_Long_Table.ROI == roi_str & ...
+            %           Track2_ROI_Long_Table.Task_Contrast == task_str;
+            % 
+            % sub_tbl = Track2_ROI_Long_Table(sub_idx, :);
+            % 
+            % req_vars = {'Beta_ROI', 'SE_ROI', 'SC_Centered', 'Certainty_Centered', 'Time_Centered', ...
+            %             'Age_Centered', 'Gender_Dummy', 'Second_Dest_Dummy', 'Session_ID'};
+            % sub_tbl  = sub_tbl(:, intersect(req_vars, sub_tbl.Properties.VariableNames));
+            % sub_tbl  = rmmissing(sub_tbl);
+            % 
+            % % Loops were skipping ptps with less than 10 or 2 N observed
+            % % for csvs and calcualtions because rank deficiency is going to
+            % % be an issue but I rather it be a reported issue.
+            % % if height(sub_tbl) < 10, continue; end
+            % % if numel(unique(sub_tbl.SC_Centered)) < 3, continue; end
+            % 
+            % raw_w = 1 ./ max(sub_tbl.SE_ROI .^ 2, 1e-6);
+            % w_vec = raw_w / mean(raw_w);
+            % 
+            % sub_tbl.Gender_Dummy      = removecats(categorical(sub_tbl.Gender_Dummy));
+            % sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
+            % sub_tbl.Session_ID        = removecats(categorical(sub_tbl.Session_ID));
+            % 
+            % has_second = numel(categories(sub_tbl.Second_Dest_Dummy)) > 1;
+            % 
+            % try
+            %     if has_second
+            %         f1 = 'Beta_ROI ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+            %         f2 = 'Beta_ROI ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+            %         f3 = 'Beta_ROI ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+            %     else
+            %         f1 = 'Beta_ROI ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+            %         f2 = 'Beta_ROI ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+            %         f3 = 'Beta_ROI ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+            %     end
+            % 
+            %     lme1 = fitlme(sub_tbl, f1, 'Weights', w_vec, 'FitMethod', 'ML');
+            %     lme2 = fitlme(sub_tbl, f2, 'Weights', w_vec, 'FitMethod', 'ML');
+            %     lme3 = fitlme(sub_tbl, f3, 'Weights', w_vec, 'FitMethod', 'ML');
+            % 
+            %     sc_idx = find(strcmp(lme1.CoefficientNames, 'SC_Centered'));
+            %     if isempty(sc_idx), continue; end
+            % 
+            %     b_sc    = lme1.Coefficients.Estimate(sc_idx);
+            %     se_sc   = lme1.Coefficients.SE(sc_idx);
+            %     t_sc    = lme1.Coefficients.tStat(sc_idx);
+            %     p_sc    = lme1.Coefficients.pValue(sc_idx);
+            %     df_sc   = lme1.Coefficients.DF(sc_idx);
+            %     ci_sc   = lme1.coefCI;
+            %     ci_l_sc = ci_sc(sc_idx, 1);
+            %     ci_u_sc = ci_sc(sc_idx, 2);
+            % 
+            %     time_idx = find(strcmp(lme1.CoefficientNames, 'Time_Centered'));
+            %     if ~isempty(time_idx)
+            %         b_time = lme1.Coefficients.Estimate(time_idx);
+            %         p_time = lme1.Coefficients.pValue(time_idx);
+            %     else
+            %         b_time = nan; p_time = nan;
+            %     end
+            % 
+            %     aic1 = lme1.ModelCriterion.AIC;
+            %     aic2 = lme2.ModelCriterion.AIC;
+            %     aic3 = lme3.ModelCriterion.AIC;
+            %     daic2 = aic2 - aic1;
+            %     daic3 = aic3 - aic1;
+            % 
+            %     meta_idx = find(sub_idx, 1, 'first');
+            %     base_meta = { ...
+            %         string(primary_baseline), string(task_str), ...
+            %         string(Track2_ROI_Long_Table.Timescale(meta_idx)), ...
+            %         string(chrom_str), string(roi_str), height(sub_tbl) ...
+            %     };
+            %     rq2_roi_full_rows = extract_lme_full_terms(lme1, base_meta, rq2_roi_full_rows);
+            %     rq2_roi_rows(end+1, 1:21) = { ...
+            %         string(primary_baseline), string(task_str), ...
+            %         string(Track2_ROI_Long_Table.Timescale(meta_idx)), ...
+            %         Track2_ROI_Long_Table.Timescale_Num(meta_idx), ...
+            %         string(chrom_str), string(roi_str), height(sub_tbl), ...
+            %         b_sc, se_sc, t_sc, df_sc, p_sc, ci_l_sc, ci_u_sc, ...
+            %         b_time, p_time, aic1, aic2, aic3, daic2, daic3 ...
+            %     };
+            % catch ME
+            %     warning('RQ2 ROI model failed for [%s - %s - %s]: %s', chrom_str, roi_str, task_str, ME.message);
+            % end
         end
     end
 end
@@ -1779,31 +2230,11 @@ fprintf('Track 2 RQ2 ROI complete: %d models evaluated.\n', height(Table_RQ2_ROI
 %% -------------------------------------------------------------------------
 % Track 2 ROIs: FDR per chromophore family (m = 28)
 Table_RQ2_ROI.P_FDR_SC = nan(height(Table_RQ2_ROI), 1);
-for c = 1:length(chroms)
-    c_idx = Table_RQ2_ROI.Chromophore == chroms{c};
-    p_raw = Table_RQ2_ROI.P_Val_SC(c_idx);
-    if ~isempty(p_raw)
-        [p_sorted, sort_order] = sort(p_raw, 'ascend');
-        m = length(p_raw);
-        q_sorted = p_sorted .* (m ./ (1:m)');
-        for k = m-1:-1:1, q_sorted(k) = min(q_sorted(k), q_sorted(k+1)); end
-        q_sorted = min(q_sorted, 1);
-        q_adj = zeros(size(p_raw));
-        q_adj(sort_order) = q_sorted;
-        Table_RQ2_ROI.P_FDR_SC(c_idx) = q_adj;
-    end
-end
 
-% Track 1 Channels: Option B Topographic FDR per task x chromophore (m <= 41)
-Table_RQ2_Channels.P_FDR_SC = nan(height(Table_RQ2_Channels), 1);
-tasks_ch = categories(categorical(Table_RQ2_Channels.Task_Contrast));
-for c = 1:length(chroms)
-    c_str = chroms{c};
-    for t = 1:length(tasks_ch)
-        t_str = tasks_ch{t};
-        slice_idx = Table_RQ2_Channels.Chromophore == c_str & ...
-                    Table_RQ2_Channels.Task_Contrast == t_str;
-        p_raw = Table_RQ2_Channels.P_Val_SC(slice_idx);
+if ~isempty(Table_RQ2_ROI)
+    for c = 1:length(chroms)
+        c_idx = Table_RQ2_ROI.Chromophore == string(chroms{c});
+        p_raw = Table_RQ2_ROI.P_Val_SC(c_idx);
         if ~isempty(p_raw)
             [p_sorted, sort_order] = sort(p_raw, 'ascend');
             m = length(p_raw);
@@ -1812,7 +2243,33 @@ for c = 1:length(chroms)
             q_sorted = min(q_sorted, 1);
             q_adj = zeros(size(p_raw));
             q_adj(sort_order) = q_sorted;
-            Table_RQ2_Channels.P_FDR_SC(slice_idx) = q_adj;
+            Table_RQ2_ROI.P_FDR_SC(c_idx) = q_adj;
+        end
+    end
+end
+
+% Track 1 Channels: Option B Topographic FDR per task x chromophore (m <= 41)
+Table_RQ2_Channels.P_FDR_SC = nan(height(Table_RQ2_Channels), 1);
+tasks_ch = categories(categorical(Table_RQ2_Channels.Task_Contrast));
+
+if ~isempty(Table_RQ2_Channels)
+    for c = 1:length(chroms)
+        c_str = string(chroms{c});
+        for t = 1:length(tasks_ch)
+            t_str = tasks_ch{t};
+            slice_idx = Table_RQ2_Channels.Chromophore == c_str & ...
+                        Table_RQ2_Channels.Task_Contrast == t_str;
+            p_raw = Table_RQ2_Channels.P_Val_SC(slice_idx);
+            if ~isempty(p_raw)
+                [p_sorted, sort_order] = sort(p_raw, 'ascend');
+                m = length(p_raw);
+                q_sorted = p_sorted .* (m ./ (1:m)');
+                for k = m-1:-1:1, q_sorted(k) = min(q_sorted(k), q_sorted(k+1)); end
+                q_sorted = min(q_sorted, 1);
+                q_adj = zeros(size(p_raw));
+                q_adj(sort_order) = q_sorted;
+                Table_RQ2_Channels.P_FDR_SC(slice_idx) = q_adj;
+            end
         end
     end
 end
@@ -1963,6 +2420,21 @@ writetable(Table_RQ2_Channels_Pub, rq2_chan_csv);
 writetable(Table_RQ2_ROI_Pub, rq2_roi_csv);
 save(rq2_mat, 'Table_RQ2_Channels', 'Table_RQ2_ROI', 'Table_RQ2_Channels_Pub', 'Table_RQ2_ROI_Pub');
 
+% In Section G (Step 9E):
+if isempty(rq2_chan_full_rows)
+    Table_RQ2_Channels_FullTerms = cell2table(cell(0, length(full_chan_cols)), 'VariableNames', full_chan_cols);
+else
+    Table_RQ2_Channels_FullTerms = cell2table(rq2_chan_full_rows, 'VariableNames', full_chan_cols);
+end
+writetable(Table_RQ2_Channels_FullTerms, fullfile(group_out_dir, 'Table_RQ2_FullModel_Covariates_Channels.csv'));
+
+if isempty(rq2_roi_full_rows)
+    Table_RQ2_ROI_FullTerms = cell2table(cell(0, length(full_roi_cols)), 'VariableNames', full_roi_cols);
+else
+    Table_RQ2_ROI_FullTerms = cell2table(rq2_roi_full_rows, 'VariableNames', full_roi_cols);
+end
+writetable(Table_RQ2_ROI_FullTerms, fullfile(group_out_dir, 'Table_RQ2_FullModel_Covariates_ROI.csv'));
+
 sig_out_dir = fullfile(group_out_dir, 'RQ_Sig');
 if ~exist(sig_out_dir, 'dir'), mkdir(sig_out_dir); end
 
@@ -2038,3 +2510,50 @@ end
 % Random Effects:
 % Random intercept for dyad ((1 | session_id)) across all models
 % Random intercept for participant nested within dyad ((1 | session_id/bids_id)) for RQ3
+
+%% =========================================================================
+%  LOCAL HELPER: Extract Full Covariate & Random-Effect Variance Breakdown
+% =========================================================================
+function rows = extract_lme_full_terms(lme, base_meta, rows, status_str)
+    if nargin < 4
+        status_str = "OK";
+    end
+    coef_tbl = lme.Coefficients;
+    ci = lme.coefCI;
+    
+    % 1. Fixed Effects (Intercept, Primary Predictor, & All Covariates)
+    for k = 1:height(coef_tbl)
+        t_val  = coef_tbl.tStat(k);
+        df_val = coef_tbl.DF(k);
+        np2    = (t_val^2) / (t_val^2 + df_val); % Partial eta-squared
+        
+        rows(end+1, :) = [base_meta, { ...
+            "Fixed", ...
+            string(coef_tbl.Name{k}), ...
+            coef_tbl.Estimate(k), ...
+            coef_tbl.SE(k), ...
+            t_val, ...
+            df_val, ...
+            coef_tbl.pValue(k), ...
+            ci(k, 1), ...
+            ci(k, 2), ...
+            np2, ...
+            NaN, ...
+            status_str ...
+        }];
+    end
+    
+    % 2. Random Effect Variance Component: (1 | Session_ID)
+    [psi, mse] = covarianceParameters(lme);
+    var_dyad   = psi{1}(1, 1);
+    icc_val    = var_dyad / (var_dyad + mse);
+    
+    rows(end+1, :) = [base_meta, { ...
+        "Random", ...
+        "Session_ID (Intercept)", ...
+        NaN, NaN, NaN, NaN, NaN, NaN, NaN, ...
+        var_dyad, ...
+        icc_val, ...
+        status_str ...
+    }];
+end
