@@ -1154,11 +1154,12 @@ for c = 1:length(chroms)
                 
                 % Include Second_Dest_Dummy covariate only when both levels (0 and 1) occur in this task subset
                 % MODEL 2 RQ1 for channels
-                if numel(categories(sub_tbl.Second_Dest_Dummy)) > 1
-                    formula_str = 'Beta ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
-                else
-                    formula_str = 'Beta ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + (1 | Session_ID)';
-                end
+                % if numel(categories(sub_tbl.Second_Dest_Dummy)) > 1
+                formula_str = 'Beta ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                % else
+                %     fprintf('Else statement entered MODEL 2 RQ1 Channels');
+                %     formula_str = 'Beta ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+                % end
                 
                 % Fit precision-weighted REML linear mixed-effects model with dyad random intercept
                 % MODEL 2 RQ1 for channels
@@ -1301,11 +1302,12 @@ for c = 1:length(chroms)
                 
                 % Include Second_Dest_Dummy covariate only when both levels occur in this task subset
                 % MODEL 2 RQ1 but for ROI instead of channels
-                if numel(categories(sub_tbl.Second_Dest_Dummy)) > 1
-                    formula_str = 'Beta_ROI ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
-                else
-                    formula_str = 'Beta_ROI ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + (1 | Session_ID)';
-                end
+                % if numel(categories(sub_tbl.Second_Dest_Dummy)) > 1
+                formula_str = 'Beta_ROI ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                % else
+                %     fprint('else statement entered model 2 rq1 roi');
+                %     formula_str = 'Beta_ROI ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+                % end
                 
                 % Fit precision-weighted REML linear mixed-effects model on ROI-averaged contrast betas
                 lme = fitlme(sub_tbl, formula_str, 'Weights', w_vec);
@@ -1605,15 +1607,16 @@ for c = 1:length(chroms)
                 
                 % Include Second_Dest_Dummy covariate only when both levels (0 and 1) occur in this task subset
                 has_second = numel(categories(sub_tbl.Second_Dest_Dummy)) > 1;
-                if has_second
-                    f1 = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
-                    f2 = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
-                    f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
-                else
-                    f1 = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
-                    f2 = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
-                    f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
-                end
+                % if has_second
+                f1 = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                f2 = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                % else
+                %     fprint('else statement entered model 2 rq2 channel'); 
+                %     f1 = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+                %     f2 = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+                %     f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+                % end
                 
                 % Fit all three nested certainty models via Maximum Likelihood ('ML') for AIC comparison
                 % MODEL 3 RQ2 for channels
@@ -1762,21 +1765,22 @@ for c = 1:length(chroms)
                 w_vec = raw_w / mean(raw_w);
                 
                 % Drop unobserved categorical levels prior to design matrix construction
-                sub_tbl.Gender_Dummy      = removecats(categorical(sub_tbl.Gender_Dummy));
+                sub_tbl.Gender_Dummy = removecats(categorical(sub_tbl.Gender_Dummy));
                 sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
-                sub_tbl.Session_ID        = removecats(categorical(sub_tbl.Session_ID));
+                sub_tbl.Session_ID = removecats(categorical(sub_tbl.Session_ID));
                 
                 % Include Second_Dest_Dummy covariate only when both levels occur in this task subset
                 has_second = numel(categories(sub_tbl.Second_Dest_Dummy)) > 1;
-                if has_second
-                    f1 = 'Beta_ROI ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
-                    f2 = 'Beta_ROI ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
-                    f3 = 'Beta_ROI ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
-                else
-                    f1 = 'Beta_ROI ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
-                    f2 = 'Beta_ROI ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
-                    f3 = 'Beta_ROI ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
-                end
+                % if has_second
+                f1 = 'Beta_ROI ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                f2 = 'Beta_ROI ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                f3 = 'Beta_ROI ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                % else
+                %     fprint('else statement entered model 2 rq2 roi');
+                %     f1 = 'Beta_ROI ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+                %     f2 = 'Beta_ROI ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+                %     f3 = 'Beta_ROI ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+                % end
                 
                 % Fit all three nested certainty models via Maximum Likelihood ('ML') on ROI averages
                 % MODEL 3 RQ2 for ROIs
