@@ -22,8 +22,8 @@ b\Mars_fNIRS\Data\fNIRS'; % PC
 % Directory = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\fNIRS'; % Laptop
 
 raw = nirs.io.loadDirectory(Directory, {'Subject'});
-event_csv_path = 'D:\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV3.csv'; % PC
-% event_csv_path = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV3.csv'; % Laptop
+event_csv_path = 'D:\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV4.csv'; % PC
+% event_csv_path = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV4.csv'; % Laptop
 event_table = readtable(event_csv_path);
 
 output_qc_dir = 'D:\GitHub\Mars_fNIRS\Output\Dyad_Plots'; % PC

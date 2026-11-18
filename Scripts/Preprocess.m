@@ -114,7 +114,7 @@ fprintf('\n For Better Visuals; Visualize_Dyads.m \n')
 % Uses built-in GUI
 % This version simply outputs the 49 channels x 2 wavelengths
 % Along with the received LSL stimulus in the legend
-raw(1).draw();
+% raw(1).draw();
 
 % Use the Visualize_Events.m script for the visual with the 
 % events provided by the CSV file
@@ -126,7 +126,7 @@ fprintf('\n--- Loading Participants Complete ---\n')
 %% 3. Attach Demographics Metadata
 
 % demo_file = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Demographics\fnirs_demographics_spyV4.csv'; % Laptop
-demo_file = 'D:\GitHub\Mars_fNIRS\Data\Demographics\fnirs_demographics_spyV4.csv';
+demo_file = 'D:\GitHub\Mars_fNIRS\Data\Demographics\fnirs_demographics_spy_V5.csv';
 demo_table = readtable(demo_file);
 
 for i = 1:length(raw)
@@ -170,8 +170,8 @@ fprintf('Demographics attached for %d participants.\n', length(raw));
 fprintf('\n--- Extracting Events for Each Participant ---\n')
 
 % Load Events File
-event_csv_path = 'D:\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV3.csv'; % PC
-% event_csv_path = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV3.csv'; % Laptop
+event_csv_path = 'D:\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV4.csv'; % PC
+% event_csv_path = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV4.csv'; % Laptop
 event_table = readtable(event_csv_path);
 
 % Event data will be grouped by ptp stored in a struct

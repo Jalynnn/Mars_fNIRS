@@ -317,7 +317,7 @@ exec_cert_time = nan(num_ptps, 1); % Elapsed decision time (s)
 % Fallback load from CSV if demographics dictionary lacks new fields
 % This section does get used
 % SubjStats has 0/59 for both final signed and popup elapsed
-demo_csv_file = 'D:\GitHub\Mars_fNIRS\Data\Demographics\fnirs_demographics_spyV4.csv';
+demo_csv_file = 'D:\GitHub\Mars_fNIRS\Data\Demographics\fnirs_demographics_spy_V5.csv';
 demo_csv_tbl = [];
 if exist(demo_csv_file, 'file')
     demo_csv_tbl = readtable(demo_csv_file);

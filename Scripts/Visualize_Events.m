@@ -34,8 +34,8 @@ end
 raw_p1 = raw(p1_idx);
 
 %% 3. Load Events CSV & Attach to P1
-% event_csv_path = 'D:\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessions(in).csv'; % PC
-event_csv_path = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessions(in).csv'; % Laptop
+% event_csv_path = 'D:\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV4.csv'; % PC
+event_csv_path = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV4.csv'; % Laptop
 
 event_table = readtable(event_csv_path);
 

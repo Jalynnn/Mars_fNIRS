@@ -6,7 +6,7 @@
 clear; clc;
 
 split_dir  = 'D:/GitHub/Mars_fNIRS/Data/ExcludedPtpsfNIRS/Split';
-csv_path   = 'D:/GitHub/Mars_fNIRS/Data/Events/spy_events_all_sessionsV3.csv';
+csv_path   = 'D:/GitHub/Mars_fNIRS/Data/Events/spy_events_all_sessionsV4.csv';
 
 if ~exist(csv_path, 'file')
     error('Event CSV not found at: %s', csv_path);
