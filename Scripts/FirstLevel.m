@@ -276,6 +276,22 @@ for i = 1:length(Hb)
     end
 
     % Third: First Arrival Site
+
+    % This section was almost completely turned around so that second
+    % destinations were no longer removed
+    % This section needs to prep a total of five regressors for all three
+    % types of contrasts: time, site, and time+site
+
+    % Isolate First Visit to True & Decoy Sites (4 regressors) & Pool
+    % Repeat Visits (+1 regressor)
+    site_map = { ...
+        'enroute_true_site',  'enroute_true_site_1st'; ...
+        'at_true_site',       'at_true_site_1st'; ...
+        'enroute_decoy_site', 'enroute_decoy_site_1st'; ...
+        'at_decoy_site',      'at_decoy_site_1st' ...
+    };
+    repeat_onsets = [];
+    repeat_durs   = [];
     
     % Determine which site was arrived to first
     % We care about 'at' not 'enroute' here
@@ -291,7 +307,7 @@ for i = 1:length(Hb)
     % Sooo instead of every dyad that has visited both enter the if
     % statement
     % Every dyad that has visited at least one enters...
-    if has_true || has_decoy
+    % if has_true || has_decoy
 
         % Does that make sense?
         % Previously, this section needed both 'at' sites to set up second
@@ -313,62 +329,102 @@ for i = 1:length(Hb)
         % to enter both sites
         % Now it just sets the other arrival to Inf so the first arrival is
         % always less than
-        if has_true,  t_true  = st('at_true_site').onset(1);  else, t_true  = Inf; end
-        if has_decoy, t_decoy = st('at_decoy_site').onset(1); else, t_decoy = Inf; end
+        % if has_true,  t_true  = st('at_true_site').onset(1);  else, t_true  = Inf; end
+        % if has_decoy, t_decoy = st('at_decoy_site').onset(1); else, t_decoy = Inf; end
         
         % Determine which one came first
-        if t_true < t_decoy
-            % Correct site was visited first! Decoy site is the second destination
-            second_dest_blocks = {'at_decoy_site', 'enroute_decoy_site'};
-        else
-            % Decoy site was visited first! True site is the second destination
-            second_dest_blocks = {'at_true_site', 'enroute_true_site'};
-        end
+        % if t_true < t_decoy
+        %     % Correct site was visited first! Decoy site is the second destination
+        %     second_dest_blocks = {'at_decoy_site', 'enroute_decoy_site'};
+        % else
+        %     % Decoy site was visited first! True site is the second destination
+        %     second_dest_blocks = {'at_true_site', 'enroute_true_site'};
+        % end
         
         % Pool second destination blocks into a nuisance regressor
         % Similar to tricorder, separate the first and remaining sites
         % arrived at
 
         % Creating a new instance so new arrays
-        sec_onsets = [];
-        sec_durs = [];
+        % sec_onsets = [];
+        % sec_durs = [];
+
+    % Loops through site maps instead
+    for sm = 1:size(site_map, 1)
+
+        raw_key = site_map{sm, 1};
+        new_key = site_map{sm, 2};
 
         % Loop through number of remaining arrivals
-        for b = 1:length(second_dest_blocks)
+        % for b = 1:length(second_dest_blocks)
 
             % Extract the name of second destination
-            b_name = second_dest_blocks{b};
+            % b_name = second_dest_blocks{b};
+        
+        % If that name/event is in the stimulus dictionary
+        if st.iskey(raw_key)
 
-            % If that name/event is in the stimulus dictionary
-            if st.iskey(b_name)
+            % Retrieve stimulus block
+            ev = st(raw_key);
 
-                % Retrieve stimulus block
-                b_stim = st(b_name);
+            Hb(i).stimulus = Hb(i).stimulus.remove(raw_key);
+
+            % % If that name/event is in the stimulus dictionary
+            % if st.iskey(b_name)
+            % 
+            %     % Retrieve stimulus block
+            %     b_stim = st(b_name);
 
                 % Retreive onset and dur
-                sec_onsets = [sec_onsets; b_stim.onset(:)];
-                sec_durs = [sec_durs;   b_stim.dur(:)];
+                % sec_onsets = [sec_onsets; b_stim.onset(:)];
+                % sec_durs = [sec_durs;   b_stim.dur(:)];
 
                 % Remove from primary task set
-                Hb(i).stimulus = Hb(i).stimulus.remove(b_name);
+                % Hb(i).stimulus = Hb(i).stimulus.remove(b_name);
+            % end
+                
+            % Creates the combined nuisance regressor here
+            % Saves the second destination events in a new column in GLM matrix
+            % if ~isempty(sec_onsets)
+            if ~isempty(ev.onset)
+    
+                % Route any 2nd+ visit to the exact same site into repeat nuisance pool
+                if length(ev.onset) > 1
+                    repeat_onsets = [repeat_onsets; ev.onset(2:end)];
+                    repeat_durs   = [repeat_durs;   ev.dur(2:end)];
+                end
+    
+                % % Takes a subset of onsets and durs
+                % [sec_onsets, s_idx] = sort(sec_onsets);
+                % sec_durs = sec_durs(s_idx);
+                
+                % % Creates new stimulusEvents obj with sub components
+                % sec_stim = nirs.design.StimulusEvents();
+                % sec_stim.name = 'site_second_destination';
+                % sec_stim.onset = sec_onsets;
+                % sec_stim.dur = sec_durs;
+                % sec_stim.amp = ones(size(sec_onsets));
+                % Hb(i).stimulus('site_second_destination') = sec_stim;
+    
+                ev_1st = nirs.design.StimulusEvents();
+                ev_1st.name = new_key;
+                ev_1st.onset = ev.onset(1);
+                ev_1st.dur = ev.dur(1);
+                ev_1st.amp = 1;
+                Hb(i).stimulus(new_key) = ev_1st;
             end
         end
-        
-        % Creates the combined nuisance regressor here
-        % Saves the second destination events in a new column in GLM matrix
-        if ~isempty(sec_onsets)
-            % Takes a subset of onsets and durs
-            [sec_onsets, s_idx] = sort(sec_onsets);
-            sec_durs = sec_durs(s_idx);
-            
-            % Creates new stimulusEvents obj with sub components
-            sec_stim = nirs.design.StimulusEvents();
-            sec_stim.name = 'site_second_destination';
-            sec_stim.onset = sec_onsets;
-            sec_stim.dur = sec_durs;
-            sec_stim.amp = ones(size(sec_onsets));
-            Hb(i).stimulus('site_second_destination') = sec_stim;
-        end
+    end
+
+    if ~isempty(repeat_onsets)
+        [repeat_onsets, sort_r] = sort(repeat_onsets);
+        repeat_durs             = repeat_durs(sort_r);
+        rep_ev                  = nirs.design.StimulusEvents();
+        rep_ev.name             = 'site_repeat_subsequent';
+        rep_ev.onset            = repeat_onsets;
+        rep_ev.dur              = repeat_durs;
+        rep_ev.amp              = ones(size(repeat_onsets));
+        Hb(i).stimulus('site_repeat_subsequent') = rep_ev;
     end
 end
 
@@ -396,10 +452,10 @@ fprintf('--- Configure Dual-Branch (HRF & FIR) GLM Basis Functions ---\n')
 block_conditions = { ...
     'planning_individual', ... % Planning
     'planning_team', ... % Planning
-    'enroute_true_site', ... % Execution
-    'enroute_decoy_site', ... % Execution
-    'at_true_site', ... % Execution
-    'at_decoy_site', ... % Execution
+    'enroute_true_site_1st', ... % Execution
+    'enroute_decoy_site_1st', ... % Execution
+    'at_true_site_1st', ... % Execution
+    'at_decoy_site_1st', ... % Execution
     % 'execution' ... % EXCLUDED
 };
 
@@ -425,7 +481,7 @@ baseline_conditions = { ...
     'status_check_subsequent', ... % Nuisance
     'tricorder_switch_true_subsequent', ... % Nuisance
     'tricorder_switch_decoy_subsequent', ... % Nuisance
-    'site_second_destination' ... % Nuisance
+    'site_repeat_subsequent' ... % Nuisance 2nd visit to same sites
 };
 
 % Since we are no longer using the 'execution' and 'debrief' blocks, also
@@ -743,26 +799,43 @@ fprintf('--- Section C Execution Complete ---\n\n');
 
 task_matched_pairs = { ...
     'planning_individual', 'planning_baseline'; ...
-    'planning_team',       'planning_baseline'; ...
-    'enroute_true_site',   'null_block'; ...
-    'enroute_decoy_site',  'null_block'; ...
-    'at_true_site',        'null_block'; ...
-    'at_decoy_site',       'null_block'; ...
-    'spam_pop_up',         'null_event_prespam'; ...
-    'status_check',        'null_event'; ...
+    'planning_team', 'planning_baseline'; ...
+    'enroute_true_site_sitelocked', 'null_block'; ...
+    'at_true_site_sitelocked', 'null_block'; ...
+    'enroute_decoy_site_sitelocked', 'null_block'; ...
+    'at_decoy_site_sitelocked', 'null_block'; ...
+    'enroute_first_site_timelocked', 'null_block'; ...
+    'at_first_site_timelocked', 'null_block'; ...
+    'enroute_true_1st_sitetime', 'null_block'; ...
+    'at_true_1st_sitetime', 'null_block'; ...
+    'enroute_decoy_1st_sitetime', 'null_block'; ...
+    'at_decoy_1st_sitetime', 'null_block'; ...
+    'spam_pop_up', 'null_event_prespam'; ...
+    'status_check', 'null_event'; ...
     'tricorder_switch_true', 'null_event'; ...
-    'tricorder_switch_decoy','null_event'; ...
+    'tricorder_switch_decoy', 'null_event'; ...
     'certainty_individual','planning_baseline'; ...
     'certainty_consensus', 'planning_baseline'  ...
 };
 
+    % 'enroute_true_site', 'null_block'; ...
+    % 'enroute_decoy_site', 'null_block'; ...
+    % 'at_true_site', 'null_block'; ...
+    % 'at_decoy_site', 'null_block'; ...
+
 fixation_tasks = { ...
     'planning_individual', ...
     'planning_team', ...
-    'enroute_true_site', ...
-    'enroute_decoy_site', ...
-    'at_true_site', ...
-    'at_decoy_site', ...
+    'enroute_true_site_sitelocked', ...
+    'at_true_site_sitelocked', ...
+    'enroute_decoy_site_sitelocked', ...
+    'at_decoy_site_sitelocked', ...
+    'enroute_first_site_timelocked', ...
+    'at_first_site_timelocked', ...
+    'enroute_true_1st_sitetime', ...
+    'at_true_1st_sitetime', ...
+    'enroute_decoy_1st_sitetime', ...
+    'at_decoy_1st_sitetime', ...
     'spam_pop_up', ...
     'status_check', ...
     'tricorder_switch_true', ...
@@ -770,6 +843,11 @@ fixation_tasks = { ...
     'certainty_individual', ...
     'certainty_consensus' ...
 };
+
+    % 'enroute_true_site', ...
+    % 'enroute_decoy_site', ...
+    % 'at_true_site', ...
+    % 'at_decoy_site', ...
 
 %% 7b. Computes first-level contrasts from fitted GLM
 
@@ -816,6 +894,16 @@ for i = 1:num_ptps
     % Extract name of conditions/events available
     cond_names = stats_i.conditions;
 
+    % Added to pull the onsets of each of the '1st' site visits
+    % 1st as in 1st visit to true/decoy, not that they are the 1st
+    % If it doesn't exist - Onset is Inf; for ptps that didn't visit the site
+    % else assign the onset
+    st_i = Hb(i).stimulus;
+    t_en_true  = Inf; if st_i.iskey('enroute_true_site_1st')  && ~isempty(st_i('enroute_true_site_1st').onset),  t_en_true  = st_i('enroute_true_site_1st').onset(1);  end
+    t_en_decoy = Inf; if st_i.iskey('enroute_decoy_site_1st') && ~isempty(st_i('enroute_decoy_site_1st').onset), t_en_decoy = st_i('enroute_decoy_site_1st').onset(1); end
+    t_at_true  = Inf; if st_i.iskey('at_true_site_1st')       && ~isempty(st_i('at_true_site_1st').onset),       t_at_true  = st_i('at_true_site_1st').onset(1);       end
+    t_at_decoy = Inf; if st_i.iskey('at_decoy_site_1st')      && ~isempty(st_i('at_decoy_site_1st').onset),      t_at_decoy = st_i('at_decoy_site_1st').onset(1);      end
+
     % This section detects the fixation baseline for the current ptp
     
     % strcmpi is case sensitive matching
@@ -856,16 +944,54 @@ for i = 1:num_ptps
     % Loop through each targetted pair
     for p = 1:size(task_matched_pairs, 1)
 
-        % Extract the target names (task-matched)
+        % % Extract the target names (task-matched)
         task_name = task_matched_pairs{p, 1};
         base_name = task_matched_pairs{p, 2};
+        % 
+        % % Extract the column indexes
+        % % idx_task = find(strcmpi(cond_names, task_name) | strcmpi(cond_names, [task_name ':canonical']), 1);
+        % % When basis_with_derive.incDeriv is set to true, it adds :0X
+        % idx_task = find(strcmpi(cond_names, task_name) | ...
+        %         strcmpi(cond_names, [task_name ':01']) | ...
+        %         strcmpi(cond_names, [task_name ':canonical']), 1);
+
+        % Replaced for contrasts since 10 similar site contrasts with only
+        % four regressors; here we pick which regressors to apply based on
+        % ptps first visited site vs. when they visited a site first
+        % Map contrast name (task_name) to actual GLM regressor name (reg_name)
+        reg_name = task_name;
+        switch task_name
+            % Site-Locked (any order)
+            case 'enroute_true_site_sitelocked',  reg_name = 'enroute_true_site_1st';
+            case 'at_true_site_sitelocked',       reg_name = 'at_true_site_1st';
+            case 'enroute_decoy_site_sitelocked', reg_name = 'enroute_decoy_site_1st';
+            case 'at_decoy_site_sitelocked',      reg_name = 'at_decoy_site_1st';
+
+            % Time-Locked (1st site overall)
+            case 'enroute_first_site_timelocked'
+                if t_en_true < t_en_decoy, reg_name = 'enroute_true_site_1st';
+                elseif isfinite(t_en_decoy), reg_name = 'enroute_decoy_site_1st';
+                else, reg_name = ''; 
+                end
+            case 'at_first_site_timelocked'
+                if t_at_true < t_at_decoy, reg_name = 'at_true_site_1st';
+                elseif isfinite(t_at_decoy), reg_name = 'at_decoy_site_1st';
+                else, reg_name = ''; 
+                end
+
+            % Site + Time-Locked (1st visit AND 1st site overall)
+            case 'enroute_true_1st_sitetime',  if ~(isfinite(t_en_true)  && t_en_true  < t_en_decoy), reg_name = ''; else, reg_name = 'enroute_true_site_1st';  end
+            case 'at_true_1st_sitetime',       if ~(isfinite(t_at_true)  && t_at_true  < t_at_decoy), reg_name = ''; else, reg_name = 'at_true_site_1st';       end
+            case 'enroute_decoy_1st_sitetime', if ~(isfinite(t_en_decoy) && t_en_decoy < t_en_true),  reg_name = ''; else, reg_name = 'enroute_decoy_site_1st'; end
+            case 'at_decoy_1st_sitetime',      if ~(isfinite(t_at_decoy) && t_at_decoy < t_at_true),  reg_name = ''; else, reg_name = 'at_decoy_site_1st';      end
+        end
+        if isempty(reg_name), continue; end
         
-        % Extract the column indexes
-        % idx_task = find(strcmpi(cond_names, task_name) | strcmpi(cond_names, [task_name ':canonical']), 1);
-        % When basis_with_derive.incDeriv is set to true, it adds :0X
-        idx_task = find(strcmpi(cond_names, task_name) | ...
-                strcmpi(cond_names, [task_name ':01']) | ...
-                strcmpi(cond_names, [task_name ':canonical']), 1);
+        % Extract the column indexes (using reg_name)
+        idx_task = find(strcmpi(cond_names, reg_name) | ...
+                strcmpi(cond_names, [reg_name ':01']) | ...
+                strcmpi(cond_names, [reg_name ':canonical']), 1);
+
         % I found out using 'disp(SubjStats_HRF(1).conditions)'
         idx_base = find(strcmpi(cond_names, base_name) | strcmpi(cond_names, [base_name ':canonical']), 1);
         
@@ -922,15 +1048,51 @@ for i = 1:num_ptps
         % Loop for each fixation period
         for t = 1:length(fixation_tasks)
 
-            % Extract task name
+            % % Extract task name
             task_name = fixation_tasks{t};
+            % 
+            % % Find the task regressor cond_names 
+            % % idx_task = find(strcmpi(cond_names, task_name) | strcmpi(cond_names, [task_name ':canonical']), 1);
+            % % When basis_with_derive.incDeriv is set to true, it adds :0X
+            % idx_task = find(strcmpi(cond_names, task_name) | ...
+            %         strcmpi(cond_names, [task_name ':01']) | ...
+            %         strcmpi(cond_names, [task_name ':canonical']), 1);
 
-            % Find the task regressor cond_names 
-            % idx_task = find(strcmpi(cond_names, task_name) | strcmpi(cond_names, [task_name ':canonical']), 1);
-            % When basis_with_derive.incDeriv is set to true, it adds :0X
-            idx_task = find(strcmpi(cond_names, task_name) | ...
-                    strcmpi(cond_names, [task_name ':01']) | ...
-                    strcmpi(cond_names, [task_name ':canonical']), 1);
+            % Replaced for contrasts since 10 similar site contrasts with only
+            % four regressors; here we pick which regressors to apply based on
+            % ptps first visited site vs. when they visited a site first
+            % Map contrast name (task_name) to actual GLM regressor name (reg_name)
+            reg_name = task_name;
+            switch task_name
+                % Site-Locked (any order)
+                case 'enroute_true_site_sitelocked',  reg_name = 'enroute_true_site_1st';
+                case 'at_true_site_sitelocked',       reg_name = 'at_true_site_1st';
+                case 'enroute_decoy_site_sitelocked', reg_name = 'enroute_decoy_site_1st';
+                case 'at_decoy_site_sitelocked',      reg_name = 'at_decoy_site_1st';
+
+                % Time-Locked (1st site overall)
+                case 'enroute_first_site_timelocked'
+                    if t_en_true < t_en_decoy, reg_name = 'enroute_true_site_1st';
+                    elseif isfinite(t_en_decoy), reg_name = 'enroute_decoy_site_1st';
+                    else, reg_name = ''; end
+                case 'at_first_site_timelocked'
+                    if t_at_true < t_at_decoy, reg_name = 'at_true_site_1st';
+                    elseif isfinite(t_at_decoy), reg_name = 'at_decoy_site_1st';
+                    else, reg_name = ''; end
+
+                % Site + Time-Locked (1st visit AND 1st site overall)
+                case 'enroute_true_1st_sitetime',  if ~(isfinite(t_en_true)  && t_en_true  < t_en_decoy), reg_name = ''; else, reg_name = 'enroute_true_site_1st';  end
+                case 'at_true_1st_sitetime',       if ~(isfinite(t_at_true)  && t_at_true  < t_at_decoy), reg_name = ''; else, reg_name = 'at_true_site_1st';       end
+                case 'enroute_decoy_1st_sitetime', if ~(isfinite(t_en_decoy) && t_en_decoy < t_en_true),  reg_name = ''; else, reg_name = 'enroute_decoy_site_1st'; end
+                case 'at_decoy_1st_sitetime',      if ~(isfinite(t_at_decoy) && t_at_decoy < t_at_true),  reg_name = ''; else, reg_name = 'at_decoy_site_1st';      end
+            end
+            if isempty(reg_name), continue; end
+
+            % Find the task regressor cond_names (using reg_name)
+            idx_task = find(strcmpi(cond_names, reg_name) | ...
+                    strcmpi(cond_names, [reg_name ':01']) | ...
+                    strcmpi(cond_names, [reg_name ':canonical']), 1);
+
             % I found out using 'disp(SubjStats_HRF(1).conditions)'
                     
             % If ptp has data for this task
