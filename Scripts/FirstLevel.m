@@ -217,31 +217,40 @@ for i = 1:length(Hb)
     end
 
     % Second: Only First Tricorder Switch
+    % Ok but now separated into true and decoy
+    tri_keys = {'tricorder_switch_true', 'tricorder_switch_decoy'};
+
+    % Needed to add a nested loop due to multiple keys
+    for tk = 1:length(tri_keys)
+
+        % Current key
+        t_key = tri_keys{tk};
     
-    % Similarly, separate the tricorder first instance from the rest
-    if st.iskey('tricorder_switch')
-
-        % Retrieve the tricorder obj with onset,dur,etc.
-        ts = st('tricorder_switch');
-
-        % If there is more than one instance (varies by ptp)
-        if length(ts.onset) > 1
-
-            % Same as before - separate all components from the first
-            % instance and the remaining
-            % These are the remaining components
-            ts_sub = nirs.design.StimulusEvents();
-            ts_sub.name = 'tricorder_switch_subsequent';
-            ts_sub.onset = ts.onset(2:end);
-            ts_sub.dur = ts.dur(2:end);
-            ts_sub.amp = ones(size(ts_sub.onset));
-            Hb(i).stimulus('tricorder_switch_subsequent') = ts_sub;
-            
-            % These are the first instances that are saved per participant
-            ts.onset = ts.onset(1);
-            ts.dur = ts.dur(1);
-            ts.amp = 1.0;
-            Hb(i).stimulus('tricorder_switch') = ts;
+        % Similarly, separate the tricorder first instance from the rest
+        if st.iskey(t_key)
+    
+            % Retrieve the tricorder obj with onset,dur,etc.
+            ts = st(t_key);
+    
+            % If there is more than one instance (varies by ptp)
+            if length(ts.onset) > 1
+    
+                % Same as before - separate all components from the first
+                % instance and the remaining
+                % These are the remaining components
+                ts_sub = nirs.design.StimulusEvents();
+                ts_sub.name = [t_key '_subsequent'];
+                ts_sub.onset = ts.onset(2:end);
+                ts_sub.dur = ts.dur(2:end);
+                ts_sub.amp = ones(size(ts_sub.onset));
+                Hb(i).stimulus([t_key '_subsequent']) = ts_sub;
+                
+                % These are the first instances that are saved per participant
+                ts.onset = ts.onset(1);
+                ts.dur = ts.dur(1);
+                ts.amp = 1.0;
+                Hb(i).stimulus(t_key) = ts;
+            end
         end
     end
 
@@ -379,7 +388,8 @@ event_conditions = { ...
     'certainty_individual', ... % Planning
     'certainty_consensus', ... % Planning
     'spam_pop_up', ... % Execution
-    'tricorder_switch', ... % Execution
+    'tricorder_switch_true', ... % Execution
+    'tricorder_switch_decoy', ... % Execution
     'status_check' ... % Execution
 };
 
@@ -392,7 +402,8 @@ baseline_conditions = { ...
     'null_event', ...
     'null_event_prespam', ... % 'debrief' ... % EXCLUDED
     'status_check_subsequent', ... % Nuisance
-    'tricorder_switch_subsequent', ... % Nuisance
+    'tricorder_switch_true_subsequent', ... % Nuisance
+    'tricorder_switch_decoy_subsequent', ... % Nuisance
     'site_second_destination' ... % Nuisance
 };
 
@@ -546,6 +557,9 @@ fprintf('--- Section B Setup Complete (Steps 3, 4, and 5) ---\n\n');
 % identical regressor columns (r = 1.0), triggering a checkRank failure.
 % Apply a minimal +1.0s jitter to tricorder_switch when a collision (<1.0s) occurs.
 
+% With the tricorder split, I'm not sure if the ptp 46? had correct or
+% decoy tricorder so it loops through both 
+
 % Command window prompt
 fprintf('\n--- Evaluating Event Timing Separation Across Cohort ---\n');
 
@@ -558,38 +572,48 @@ for i = 1:length(Hb)
     % If stimulus is spam or tricorder
     % this section is really specific to ptp 46 since it had the same onset
     % time
-    if st.iskey('spam_pop_up') && st.iskey('tricorder_switch')
+    if st.iskey('spam_pop_up') % && st.iskey('tricorder_switch')
 
         % Collect the onset for both
         s_on = st('spam_pop_up').onset;
-        t_on = st('tricorder_switch').onset;
+        % t_on = st('tricorder_switch').onset;
+
+        % Added for split tricorder
+        for tk = {'tricorder_switch_true', 'tricorder_switch_decoy'}
+            t_key = tk{1};
+            if st.iskey(t_key)
+                t_on = st(t_key).onset;
         
-        % If both are available
-        if ~isempty(s_on) && ~isempty(t_on)
-
-            % Take the absolute time of each event
-            % Take the minimum difference
-            dt_matrix = abs(s_on(:) - t_on(:)');
-            min_dt = min(dt_matrix(:));
-            
-            % if it's less than one
-            % as in, if it occurred in the same second..
-            if min_dt < 1.0
-
-                % Command window update
-                fprintf('  Adjusting Participant %02d: min delta = %.2fs (<1.0s threshold).\n', i, min_dt);
-
-                % Take the tricorder event
-                tri_stim = st('tricorder_switch');
-
-                % And update it's onset time by +1 sec
-                tri_stim.onset = tri_stim.onset + 1.0;
-
-                % Save the stimulusEvent
-                Hb(i).stimulus('tricorder_switch') = tri_stim;
-
-                % Command window update
-                fprintf('  -> Shifted tricorder_switch by +1.0s to break discrete bin collision.\n');
+                % If both are available
+                if ~isempty(s_on) && ~isempty(t_on)
+        
+                    % Take the absolute time of each event
+                    % Take the minimum difference
+                    dt_matrix = abs(s_on(:) - t_on(:)');
+                    min_dt = min(dt_matrix(:));
+                    
+                    % if it's less than one
+                    % as in, if it occurred in the same second..
+                    if min_dt < 1.0
+        
+                        % Command window update
+                        fprintf('  Adjusting Participant %02d (%s): min delta = %.2fs (<1.0s threshold).\n', i, t_key, min_dt);
+        
+                        % Take the tricorder event
+                        % tri_stim = st('tricorder_switch');
+                        tri_stim = st(t_key);
+        
+                        % And update it's onset time by +1 sec
+                        tri_stim.onset = tri_stim.onset + 1.0;
+        
+                        % Save the stimulusEvent
+                        % Hb(i).stimulus('tricorder_switch') = tri_stim;
+                        Hb(i).stimulus(t_key) = tri_stim;
+        
+                        % Command window update
+                        fprintf('  -> Shifted tricorder by +1.0s to break discrete bin collision.\n');
+                    end
+                end
             end
         end
     end
@@ -705,7 +729,8 @@ task_matched_pairs = { ...
     'at_decoy_site',       'null_block'; ...
     'spam_pop_up',         'null_event_prespam'; ...
     'status_check',        'null_event'; ...
-    'tricorder_switch',    'null_event'; ...
+    'tricorder_switch_true', 'null_event'; ...
+    'tricorder_switch_decoy','null_event'; ...
     'certainty_individual','planning_baseline'; ...
     'certainty_consensus', 'planning_baseline'  ...
 };
@@ -719,7 +744,8 @@ fixation_tasks = { ...
     'at_decoy_site', ...
     'spam_pop_up', ...
     'status_check', ...
-    'tricorder_switch', ...
+    'tricorder_switch_true', ...
+    'tricorder_switch_decoy', ...
     'certainty_individual', ...
     'certainty_consensus' ...
 };

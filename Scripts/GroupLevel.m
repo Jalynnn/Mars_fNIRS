@@ -313,6 +313,7 @@ intended_both = nan(num_ptps, 1); % Indicator of second destination
 exec_cert_final = nan(num_ptps, 1); % Unsigned individual certainty
 exec_cert_signed = nan(num_ptps, 1); % Signed individual certainty
 exec_cert_time = nan(num_ptps, 1); % Elapsed decision time (s)
+n_switches_raw = nan(num_ptps, 1); % Tricorder switch counts for covariate
 
 % Fallback load from CSV if demographics dictionary lacks new fields
 % This section does get used
@@ -365,6 +366,14 @@ for i = 1:num_ptps
     elseif ~isempty(demo_csv_tbl)
         idx = find(demo_csv_tbl.participant_id == ptp_id(i), 1);
         if ~isempty(idx), exec_cert_time(i) = demo_csv_tbl.exec_cert_final_popup_elapsed_s(idx); end
+    end
+
+    % Tricorder Covariate n_switches_first_block
+    if d.iskey('n_switches_first_block')
+        n_switches_raw(i) = d('n_switches_first_block');
+    elseif ~isempty(demo_csv_tbl) && ismember('n_switches_first_block', demo_csv_tbl.Properties.VariableNames)
+        idx = find(demo_csv_tbl.participant_id == ptp_id(i), 1);
+        if ~isempty(idx), n_switches_raw(i) = demo_csv_tbl.n_switches_first_block(idx); end
     end
 end
 
@@ -443,6 +452,17 @@ fprintf('  -> Unsigned Certainty (C):  mean = %.2f (range: %d - %d)\n', mean_cer
 fprintf('  -> Signed Certainty (SC):   mean = %.2f (range: %d - %d)\n', mean_sc, min(exec_cert_signed), max(exec_cert_signed));
 fprintf('  -> Elapsed Time (s):        mean = %.2f (range: %d - %d)\n', mean_time, min(exec_cert_time), max(exec_cert_time));
 
+% Just going to slide this tricorder covariate in...
+% Tricorder Switch Count (Switches) cohort mean centered across tricorder operators
+% Compute cohort average switches ignoring missing values
+% omitnan as in Omit NAN not Omniman :) 
+mean_switches = mean(n_switches_raw, 'omitnan');
+switches_centered = n_switches_raw - mean_switches;
+
+% Log the range and mean to command window
+fprintf('  -> Tricorder Switches (1st block): mean = %.2f (range: %d - %d, N = %d)\n', ...
+    mean_switches, min(n_switches_raw), max(n_switches_raw), sum(~isnan(n_switches_raw)));
+
 %% 5e. Dyadic Covariate & Second Destination
 
 % Code based on whether the dyad visited a second site
@@ -461,12 +481,14 @@ Cohort_Covariates = table(ptp_id, session_id, age_raw, age_centered, ...
     exec_cert_final, cert_centered, ...
     exec_cert_signed, sc_centered, ...
     exec_cert_time, time_centered, ...
+    n_switches_raw, switches_centered, ...
     second_dest_dummy, ...
     'VariableNames', {'Participant_ID', 'Session_ID', 'Age', 'Age_Centered', ...
                       'Gender', 'Gender_Dummy', 'Team_Perf', 'Team_Perf_Dummy', ...
                       'Certainty', 'Certainty_Centered', ...
                       'Signed_Certainty', 'SC_Centered', ...
                       'Elapsed_Time', 'Time_Centered', ...
+                      'N_Switches', 'Switches_Centered', ...
                       'Intended_Both'});
 
 % Preview the first 8 rows of the table in the command window
@@ -497,8 +519,8 @@ fprintf('Building Track 1: Channel-level long table...\n');
 contrast_types = {'TaskMatched', 'Fixation'};
 
 % The select tasks that are transient/events and not sustained/blocks
-transient_tasks = {'status_check', 'spam_pop_up', 'tricorder_switch', ...
-                   'certainty_individual', 'certainty_consensus'};
+transient_tasks = {'status_check', 'spam_pop_up', 'tricorder_switch_true', ...
+                   'tricorder_switch_decoy', 'certainty_individual', 'certainty_consensus'};
 
 % Empty cell array for per ptp, per task sub-tables
 track1_cell = {};
