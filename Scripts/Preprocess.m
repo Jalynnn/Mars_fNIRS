@@ -423,11 +423,17 @@ fprintf('\n Montage application complete for all ptps \n')
 % being marked as bad channels, the script goes on to remove the noisy
 % channels and not remove any ptps
 
+% Nov 17th
+% Change SNR 3.0 (CV = 33.3) to CV 15 where SNR is 6.67 ~line 434
+% Exclude based on one wavelenght; not both ~line 591 change to 'any'
+% instead of 'all'
+
 % Command window updates
 fprintf('\n--- Initiating Quality Control (SNR) ---\n')
 
 % Methods: SNR < 3.0 (CV > 33.3%) BEFORE optical density conversion
-snr_threshold = 3.0;
+% snr_threshold = 3.0;
+snr_threshold = 6.67;
 
 % Creates an empty struct with a list of the following items for ptps to be
 % added to for a complete quality assessment summary
@@ -583,7 +589,7 @@ for i = 1:length(raw)
 
         % use 'any' for one or the either wavelength
         % use 'all' if both wavelengths to exclude one channel
-        if all(chan_snr(rows_for_this_pair) < snr_threshold)
+        if any(chan_snr(rows_for_this_pair) < snr_threshold)
             % Marks this channel as bad since it falls below the threshold
             bad_pair_mask(p) = true;
         end
@@ -663,11 +669,11 @@ qa_export_dir = 'D:\GitHub\Mars_fNIRS\Output\Preprocess'; % PC
 if ~exist(qa_export_dir, 'dir')
     mkdir(qa_export_dir);
 end
-writetable(qa_table, fullfile(qa_export_dir, '3snr_eventsOnly_bothWavelengths_qa_summary.csv'));
+writetable(qa_table, fullfile(qa_export_dir, '667snr_eventsOnly_oneWavelengths_qa_summary.csv'));
 
 % Command window updates
 fprintf('\n--- Quality Control Complete ---\n')
-fprintf('\n Quality Assessment Summary available at: \n\t PreprocessOutput/3snr_eventsOnly_bothWavelengths_qa_summary.csv \n\n')
+fprintf('\n Quality Assessment Summary available at: \n\t PreprocessOutput/667snr_eventsOnly_oneWavelengths_qa_summary.csv \n\n')
 
 %% Section D. Preprocessing Pipeline Construction w/ NIRS-Toolbox
 

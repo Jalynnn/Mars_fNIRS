@@ -401,7 +401,8 @@ baseline_conditions = { ...
 
 %% 3a. Branch 1: HRF
 
-job_hrf = nirs.modules.GLM();
+job_hrf = nirs.modules.AddAuxRegressors();
+job_hrf = nirs.modules.GLM(job_hrf);
 job_hrf.name = 'HRF GLM';
 job_hrf.type = 'AR-IRLS';
 
