@@ -948,5 +948,5 @@ results_file = fullfile(save_dir, 'FirstLevel_Cohort_Stats.mat');
 
 % Command window prints and save file
 fprintf('Saving results to: %s ...\n', results_file);
-save(results_file, 'SubjStats_HRF', 'SubjStats_FIR', 'Contrasts_HRF', '-v7.3');
+save(results_file, 'SubjStats_HRF', 'SubjStats_FIR', 'Contrasts_HRF');
 fprintf('Saved successfully. FirstLevel.m complete.\n\n');
