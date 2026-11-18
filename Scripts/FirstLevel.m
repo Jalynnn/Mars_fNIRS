@@ -129,6 +129,10 @@ for i = 1:length(Hb)
     % matter where it is. However report it in command window
     % Due to this added command window desire, the following code is added:
 
+    % Nov 18th 2026
+    % Instead of using 'enroute' we are using 'at'
+    % Plus this change is also being applied to both tricorder events
+
     % Extract participant ID for terminal window documentation
     if isprop(Hb(i), 'demographics') && Hb(i).demographics.iskey('participant_id')
         ptp_label = num2str(Hb(i).demographics('participant_id'));
@@ -139,23 +143,23 @@ for i = 1:length(Hb)
     % Add section to determine the cutoff
 
     % List of onset options
-    site_keys = {'enroute_true_site', 'enroute_decoy_site', 'at_true_site', 'at_decoy_site'};
+    at_keys = {'at_true_site', 'at_decoy_site'};
     % Empty array for onset options timing
-    site_onsets = []; 
+    at_onsets = []; 
     % Loop through each site option
-    for sk = 1:length(site_keys)
-        if st.iskey(site_keys{sk}) && ~isempty(st(site_keys{sk}).onset)
-            site_onsets(end+1) = st(site_keys{sk}).onset(1);
+    for ak = 1:length(at_keys)
+        if st.iskey(at_keys{ak}) && ~isempty(st(at_keys{ak}).onset)
+            at_onsets(end+1) = st(at_keys{ak}).onset(1);
         end
     end
 
     % What if a pair/ptp never reaches enroute?
-    if isempty(site_onsets)
-        fprintf('Ptp %s never had onset for sites', ptp_label);
+    if isempty(at_onsets)
+        fprintf('Ptp %s never arrived at any site (no at_true_site/at_decoy_site); using full session duration.\n', ptp_label);
         t_cutoff = Inf;
     else
         % Else just take the soonest onset
-        t_cutoff = min(site_onsets);
+        t_cutoff = min(at_onsets);
     end
 
     % Keep all status check-ins that occur before first enroute/at
@@ -219,6 +223,8 @@ for i = 1:length(Hb)
     % Second: Only First Tricorder Switch
     % Ok but now separated into true and decoy
     tri_keys = {'tricorder_switch_true', 'tricorder_switch_decoy'};
+    
+    % Second UPDATED: Actually avg tricorder switches up until 'at'
 
     % Needed to add a nested loop due to multiple keys
     for tk = 1:length(tri_keys)
@@ -233,22 +239,37 @@ for i = 1:length(Hb)
             ts = st(t_key);
     
             % If there is more than one instance (varies by ptp)
-            if length(ts.onset) > 1
+            % if length(ts.onset) > 1
+            % Meh keep consistent with status check ins
+            if ~isempty(ts.onset)
+
+                keep_idx = find(ts.onset < t_cutoff);
+                sub_idx = find(ts.onset >= t_cutoff);
+
+                % Edge case: No switches of this type before first arrival -> keep first instance
+                if isempty(keep_idx)
+                    fprintf('Ptp %s had 0 %s events before first arrival (t < %.1fs); retaining first switch.\n', ...
+                        ptp_label, t_key, t_cutoff);
+                    keep_idx = 1;
+                    sub_idx  = 2:length(ts.onset);
+                end
     
                 % Same as before - separate all components from the first
                 % instance and the remaining
                 % These are the remaining components
-                ts_sub = nirs.design.StimulusEvents();
-                ts_sub.name = [t_key '_subsequent'];
-                ts_sub.onset = ts.onset(2:end);
-                ts_sub.dur = ts.dur(2:end);
-                ts_sub.amp = ones(size(ts_sub.onset));
-                Hb(i).stimulus([t_key '_subsequent']) = ts_sub;
+                if ~isempty(sub_idx)
+                    ts_sub = nirs.design.StimulusEvents();
+                    ts_sub.name = [t_key '_subsequent'];
+                    ts_sub.onset = ts.onset(2:end);
+                    ts_sub.dur = ts.dur(2:end);
+                    ts_sub.amp = ones(size(ts_sub.onset));
+                    Hb(i).stimulus([t_key '_subsequent']) = ts_sub;
+                end
                 
                 % These are the first instances that are saved per participant
-                ts.onset = ts.onset(1);
-                ts.dur = ts.dur(1);
-                ts.amp = 1.0;
+                ts.onset = ts.onset(keep_idx);
+                ts.dur = ts.dur(keep_idx);
+                ts.amp = ones(size(ts.onset));
                 Hb(i).stimulus(t_key) = ts;
             end
         end
