@@ -246,31 +246,33 @@ for i = 1:length(Hb)
                 keep_idx = find(ts.onset < t_cutoff);
                 sub_idx = find(ts.onset >= t_cutoff);
 
-                % Edge case: No switches of this type before first arrival -> keep first instance
-                if isempty(keep_idx)
-                    fprintf('Ptp %s had 0 %s events before first arrival (t < %.1fs); retaining first switch.\n', ...
-                        ptp_label, t_key, t_cutoff);
-                    keep_idx = 1;
-                    sub_idx  = 2:length(ts.onset);
-                end
-    
                 % Same as before - separate all components from the first
                 % instance and the remaining
                 % These are the remaining components
+                % well not first component anymore; the first avgs
                 if ~isempty(sub_idx)
                     ts_sub = nirs.design.StimulusEvents();
                     ts_sub.name = [t_key '_subsequent'];
-                    ts_sub.onset = ts.onset(2:end);
-                    ts_sub.dur = ts.dur(2:end);
+                    % ts_sub.onset = ts.onset(2:end);
+                    % ts_sub.dur = ts.dur(2:end);
+                    ts_sub.onset = ts.onset(sub_idx);
+                    ts_sub.dur = ts.dur(sub_idx);
                     ts_sub.amp = ones(size(ts_sub.onset));
                     Hb(i).stimulus([t_key '_subsequent']) = ts_sub;
                 end
                 
                 % These are the first instances that are saved per participant
-                ts.onset = ts.onset(keep_idx);
-                ts.dur = ts.dur(keep_idx);
-                ts.amp = ones(size(ts.onset));
-                Hb(i).stimulus(t_key) = ts;
+                % Keep only pre-arrival switches in the primary regressor; otherwise remove it
+                if ~isempty(keep_idx)
+                    ts.onset = ts.onset(keep_idx);
+                    ts.dur = ts.dur(keep_idx);
+                    ts.amp = ones(size(ts.onset));
+                    Hb(i).stimulus(t_key) = ts;
+                else
+                    fprintf('Ptp %s had 0 %s events before first arrival (t < %.1fs); removing primary regressor.\n', ...
+                        ptp_label, t_key, t_cutoff);
+                    Hb(i).stimulus = Hb(i).stimulus.remove(t_key);
+                end
             end
         end
     end
@@ -622,7 +624,7 @@ else
 end
 
 fprintf('[Step 5] Short-separation physiological nuisance regression enabled on both branches.\n');
-fprintf('   - Detected %d short-separation channels (%d physical optode pairs) in probe geometry.\n', ...
+fprintf('   - Detected %d short-separation channels (HbO & HbR) (%d physical optode pairs) in probe geometry.\n', ...
     n_ssc, n_ssc / 2);
 fprintf('--- Section B Setup Complete (Steps 3, 4, and 5) ---\n\n');
 
