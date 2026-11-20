@@ -436,9 +436,10 @@ fprintf('\n--- Initiating Quality Control (SNR) ---\n')
 snr_threshold = 6.67;
 
 % Nov 19th implementing sliding window
-win_sec = 10; % 10s window
-overlap_frac = 0.50; % 50% overlap which is a 5s step
-max_fail_frac = 0.50; % prune chs if >50% of windows fail
+% Nov 20th commenting out sliding window
+% win_sec = 10; % 10s window
+% overlap_frac = 0.50; % 50% overlap which is a 5s step
+% max_fail_frac = 0.50; % prune chs if >50% of windows fail
 
 % Creates an empty struct with a list of the following items for ptps to be
 % added to for a complete quality assessment summary
@@ -469,13 +470,13 @@ for i = 1:length(raw)
     % They were replaced once I wanted to keep snr within the events and
     % not across the entire raw intensity
 
-    % % mean intensity across all time points
+    % mean intensity across all time points
     % mean_intensity = mean(d, 1);
-    % 
-    % % Std across all time points
+
+    % Std across all time points
     % std_intensity = std(d, 1);
-    % 
-    % % SNR = mean / std; add eps so avoid divide by zero
+
+    % SNR = mean / std; add eps so avoid divide by zero
     % chan_snr = mean_intensity ./ (std_intensity + eps);
 
     % Use only the active task window:
@@ -535,40 +536,42 @@ for i = 1:length(raw)
     % Compute SNR strictly across the active task slice
     d_active = d(task_slice, :);
 
+    % Comment out next three if using sliding window
     % We would continue with this if we weren't doing sliding window
     % mean intensity across all time points
-    % mean_intensity = mean(d_active, 1);
+    mean_intensity = mean(d_active, 1);
 
     % Std across all time points
-    % std_intensity = std(d_active, 1);
+    std_intensity = std(d_active, 1);
 
     % SNR = mean / std; add eps so avoid divide by zero
-    % chan_snr = mean_intensity ./ (std_intensity + eps);
+    chan_snr = mean_intensity ./ (std_intensity + eps);
 
-    % Instead here is the following for sliding window:
-    n_samples = size(d_active, 1);
-
-    % Compute sliding window SNR across the active task slice
-    % Has 10s windows with 50% overlap
-    w_samp = max(2, round(win_sec * raw(i).Fs));
-    step_samp = max(1, round(w_samp * (1 - overlap_frac)));
-
-    if n_samples <= w_samp
-        win_starts = 1;
-        win_ends = n_samples;
-    else
-        win_starts = 1:step_samp:(n_samples - w_samp + 1);
-        win_ends = win_starts + w_samp - 1;
-    end
-    n_wins = length(win_starts);
-
-    snr_windows = zeros(n_wins, size(d_active, 2));
-    for w = 1:n_wins
-        seg = d_active(win_starts(w):win_ends(w), :);
-        mu =mean(seg, 1);
-        sd = std(seg, 0, 1);
-        snr_windows(w, :) = mu ./ (sd + eps);
-    end
+    % Comment out 10s sliding window
+    % % Instead here is the following for sliding window:
+    % n_samples = size(d_active, 1);
+    % 
+    % % Compute sliding window SNR across the active task slice
+    % % Has 10s windows with 50% overlap
+    % w_samp = max(2, round(win_sec * raw(i).Fs));
+    % step_samp = max(1, round(w_samp * (1 - overlap_frac)));
+    % 
+    % if n_samples <= w_samp
+    %     win_starts = 1;
+    %     win_ends = n_samples;
+    % else
+    %     win_starts = 1:step_samp:(n_samples - w_samp + 1);
+    %     win_ends = win_starts + w_samp - 1;
+    % end
+    % n_wins = length(win_starts);
+    % 
+    % snr_windows = zeros(n_wins, size(d_active, 2));
+    % for w = 1:n_wins
+    %     seg = d_active(win_starts(w):win_ends(w), :);
+    %     mu =mean(seg, 1);
+    %     sd = std(seg, 0, 1);
+    %     snr_windows(w, :) = mu ./ (sd + eps);
+    % end
 
     % Since we are still working with raw data before conversion, we have
     % each channel twice at 760 and 850 nm
@@ -611,18 +614,20 @@ for i = 1:length(raw)
         % identify rows corresponding to this pair we are at in the loop
         rows_for_this_pair = (pair_idx == p);
 
+        % This section is for non-sliding window
         % use 'any' for one or the either wavelength
         % use 'all' if both wavelengths to exclude one channel
-        % if any(chan_snr(rows_for_this_pair) < snr_threshold)
-        %     % Marks this channel as bad since it falls below the threshold
-        %     bad_pair_mask(p) = true;
-        % end
-
-        % Have to look at sliding window - Ch fail if >50% windows fail
-        win_failed = any(snr_windows(:, rows_for_this_pair) < snr_threshold, 2);
-        if mean(win_failed) > max_fail_frac
+        if any(chan_snr(rows_for_this_pair) < snr_threshold)
+            % Marks this channel as bad since it falls below the threshold
             bad_pair_mask(p) = true;
         end
+
+        % Comment out sliding window
+        % Have to look at sliding window - Ch fail if >50% windows fail
+        % win_failed = any(snr_windows(:, rows_for_this_pair) < snr_threshold, 2);
+        % if mean(win_failed) > max_fail_frac
+        %     bad_pair_mask(p) = true;
+        % end
     end
 
     % Document the quality assessment
@@ -699,11 +704,13 @@ qa_export_dir = 'D:\GitHub\Mars_fNIRS\Output\Preprocess'; % PC
 if ~exist(qa_export_dir, 'dir')
     mkdir(qa_export_dir);
 end
-writetable(qa_table, fullfile(qa_export_dir, '667snr_eventsOnly_oneWavelengths_10sSlidingWindow_qa_summary.csv'));
+
+% writetable(qa_table, fullfile(qa_export_dir, '667snr_eventsOnly_oneWavelengths_10sSlidingWindow_qa_summary.csv'));
+writetable(qa_table, fullfile(qa_export_dir, '667snr_eventsOnly_oneWavelengths_qa_summary.csv'));
 
 % Command window updates
 fprintf('\n--- Quality Control Complete ---\n')
-fprintf('\n Quality Assessment Summary available at: \n\t PreprocessOutput/667snr_eventsOnly_oneWavelengths_10sSlidingWindow_qa_summary.csv \n\n')
+fprintf('\n Quality Assessment Summary available at: \n\t PreprocessOutput/667snr_eventsOnly_oneWavelengths_qa_summary.csv \n\n')
 
 %% Section D. Preprocessing Pipeline Construction w/ NIRS-Toolbox
 
