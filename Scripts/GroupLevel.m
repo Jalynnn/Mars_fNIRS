@@ -670,20 +670,27 @@ fprintf('Computing exact HbDiff (HbO - HbR) for Track 1 Channels...\n');
 idx_hbo = find(Track1_Channel_Long_Table.Chromophore == "HBO");
 idx_hbr = find(Track1_Channel_Long_Table.Chromophore == "HBR");
 
-% Enforce 1-1 row alignment between HbO and HbR before vector subtraction
-% for HbDiff
+% Enforce 1-1 row alignment between HbO and HbR before computing |HbO - HbR|
 assert(isequal(Track1_Channel_Long_Table.Channel(idx_hbo), Track1_Channel_Long_Table.Channel(idx_hbr)), ...
     'Mismatch in channel alignment between HBO and HBR!');
 assert(isequal(Track1_Channel_Long_Table.Participant_ID(idx_hbo), Track1_Channel_Long_Table.Participant_ID(idx_hbr)), ...
     'Mismatch in participant alignment between HBO and HBR!');
 
+% Signed difference and absolute magnitude |HbO - HbR|
+signed_diff_beta = Track1_Channel_Long_Table.Beta(idx_hbo) - Track1_Channel_Long_Table.Beta(idx_hbr);
+diff_beta = abs(signed_diff_beta);
+
+% Prior to using absolute
 % Exact differential formulas
 % Beta_HbO - Beta_HbR
-diff_beta = Track1_Channel_Long_Table.Beta(idx_hbo) - Track1_Channel_Long_Table.Beta(idx_hbr);
-% sqrt(SE_HbO^2 + SE_HbR^2) under standard error propagation
+% diff_beta = Track1_Channel_Long_Table.Beta(idx_hbo) - Track1_Channel_Long_Table.Beta(idx_hbr);
+
+% Propagated standard error (note: first-order SE approximation for |X| is still sqrt(Var(X)) away from 0)
 diff_se = sqrt(Track1_Channel_Long_Table.SE(idx_hbo).^2 + Track1_Channel_Long_Table.SE(idx_hbr).^2);
+
 % Beta_diff / SE_diff
 diff_t = diff_beta ./ diff_se;
+
 % two tailed normal approx p-val
 diff_p = 2 * (1 - normcdf(abs(diff_t)));
 
