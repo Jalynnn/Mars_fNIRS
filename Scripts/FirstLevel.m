@@ -23,16 +23,16 @@ warning('off', 'MATLAB:dispatcher:nameConflict');
 %% 1. Set MATLAB Paths
 
 % Add NIRS Toolbox to MATLAB Path
-% addpath(genpath('C:\Users\Jalynn\Documents\GitHub\nirs-toolbox')) % Laptop
-addpath(genpath('D:\GitHub\nirs-toolbox')) % PC
+addpath(genpath('C:\Users\Jalynn\Documents\GitHub\nirs-toolbox')) % Laptop
+% addpath(genpath('D:\GitHub\nirs-toolbox')) % PC
 
 % Add NIRS SPM 
-% addpath('C:\Users\Jalynn\Documents\GitHub\spm12') % Laptop
-addpath('D:\GitHub\spm12') % PC
+addpath('C:\Users\Jalynn\Documents\GitHub\spm12') % Laptop
+% addpath('D:\GitHub\spm12') % PC
 
 % https://www.nitrc.org/projects/nirs_spm/
-% addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1') % Laptop
-addpath('D:\GitHub\NIRS_SPM_v4_r1') % PC
+addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1') % Laptop
+% addpath('D:\GitHub\NIRS_SPM_v4_r1') % PC
 
 %% 2. Load Preprocessed Cohort Data & Prune Execution/Debrief
 
@@ -44,8 +44,8 @@ addpath('D:\GitHub\NIRS_SPM_v4_r1') % PC
 fprintf('\n--- Loading Preprocessed Cohort Data ---\n')
 
 % Preprocess.m saved to Derivatives folder with following file name
-% derivatives_dir = "C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Output\Preprocess"; % Laptop
-derivatives_dir = 'D:\GitHub\Mars_fNIRS\Output\Preprocess'; % PC
+derivatives_dir = "C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Output\Preprocess"; % Laptop
+% derivatives_dir = 'D:\GitHub\Mars_fNIRS\Output\Preprocess'; % PC
 load_file = fullfile(derivatives_dir, "Hb_preprocessed_cohort.mat");
 
 % Error checking if file exists yet
@@ -733,7 +733,8 @@ fprintf('Branch 1 complete: %d SubjStats generated in %.2f minutes (%.1f s/ptp).
 
 % Checkpoint Save: Guarantee Branch 1 is never lost
 % Even if FirstLevel quits early during FIR
-save_dir = 'D:\GitHub\Mars_fNIRS\Output\FirstLevel';
+save_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Output\FirstLevel'; % Laptop
+% save_dir = 'D:\GitHub\Mars_fNIRS\Output\FirstLevel'; % PC
 
 % If directory doesn't exist, create it
 if ~exist(save_dir, 'dir'), mkdir(save_dir); end
@@ -1139,7 +1140,8 @@ fprintf('Dual contrasts completed in %.2f seconds!\n', t_contrast_elapsed);
 %% Section E. Save Results to Derivatives
 
 % Assign directory
-save_dir = 'D:\GitHub\Mars_fNIRS\Output\FirstLevel';
+save_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Output\FirstLevel'; % Laptop
+% save_dir = 'D:\GitHub\Mars_fNIRS\Output\FirstLevel'; % PC
 
 % If the folder does not exist, create it
 if ~exist(save_dir, 'dir')

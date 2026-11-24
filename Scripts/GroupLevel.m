@@ -20,16 +20,16 @@ warning('off', 'MATLAB:dispatcher:nameConflict');
 %% 1. Set MATLAB Paths
 
 % Add NIRS Toolbox to MATLAB Path
-% addpath(genpath('C:\Users\Jalynn\Documents\GitHub\nirs-toolbox')) % Laptop
-addpath(genpath('D:\GitHub\nirs-toolbox')) % PC
+addpath(genpath('C:\Users\Jalynn\Documents\GitHub\nirs-toolbox')) % Laptop
+% addpath(genpath('D:\GitHub\nirs-toolbox')) % PC
 
 % Add NIRS SPM 
-% addpath('C:\Users\Jalynn\Documents\GitHub\spm12') % Laptop
-addpath('D:\GitHub\spm12') % PC
+addpath('C:\Users\Jalynn\Documents\GitHub\spm12') % Laptop
+% addpath('D:\GitHub\spm12') % PC
 
 % https://www.nitrc.org/projects/nirs_spm/
-% addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1') % Laptop
-addpath('D:\GitHub\NIRS_SPM_v4_r1') % PC
+addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1') % Laptop
+% addpath('D:\GitHub\NIRS_SPM_v4_r1') % PC
 
 %% 2. Load First Level Files
 
@@ -37,7 +37,8 @@ addpath('D:\GitHub\NIRS_SPM_v4_r1') % PC
 fprintf('\n--- Loading First Level Data ---\n')
 
 % Set paths through folder to .mat file from FirstLevel
-firstLevel_file = 'D:\GitHub\Mars_fNIRS\Output\FirstLevel\FirstLevel_Cohort_Stats.mat'; % PC
+firstLevel_file = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Output\FirstLevel\FirstLevel_Cohort_Stats.mat'; % Laptop
+% firstLevel_file = 'D:\GitHub\Mars_fNIRS\Output\FirstLevel\FirstLevel_Cohort_Stats.mat'; % PC
 
 % Verify file exists
 if ~exist(firstLevel_file, 'file')
@@ -87,7 +88,8 @@ fprintf('\n--- Loading Registered MNI Coordinates & Defining ROIs ---\n')
 %% 3. Define ROIs
 
 % Set up export directory
-group_out_dir = 'D:\GitHub\Mars_fNIRS\Output\GroupLevel'; % PC
+group_out_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Output\GroupLevel'; % Laptop
+% group_out_dir = 'D:\GitHub\Mars_fNIRS\Output\GroupLevel'; % PC
 if ~exist(group_out_dir, 'dir'), mkdir(group_out_dir); end
 
 %% 3a. Define Channel Montage Configurations
@@ -318,7 +320,8 @@ n_switches_raw = nan(num_ptps, 1); % Tricorder switch counts for covariate
 % Fallback load from CSV if demographics dictionary lacks new fields
 % This section does get used
 % SubjStats has 0/59 for both final signed and popup elapsed
-demo_csv_file = 'D:\GitHub\Mars_fNIRS\Data\Demographics\fnirs_demographics_spy_V5.csv';
+demo_csv_file = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Demographics\fnirs_demographics_spy_V5.csv'; % Laptop
+% demo_csv_file = 'D:\GitHub\Mars_fNIRS\Data\Demographics\fnirs_demographics_spy_V5.csv'; % PC
 demo_csv_tbl = [];
 if exist(demo_csv_file, 'file')
     demo_csv_tbl = readtable(demo_csv_file);

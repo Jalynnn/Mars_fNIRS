@@ -20,17 +20,17 @@ warning('off', 'MATLAB:dispatcher:nameConflict');
 
 % Add NIRS Toolbox to MATLAB Path
 % https://github.com/huppertt/nirs-toolbox.git
-addpath(genpath('D:\GitHub\nirs-toolbox')) % PC
-% addpath(genpath('C:\Users\Jalynn\Documents\GitHub\nirs-toolbox')) % Laptop
+% addpath(genpath('D:\GitHub\nirs-toolbox')) % PC
+addpath(genpath('C:\Users\Jalynn\Documents\GitHub\nirs-toolbox')) % Laptop
 
 % Add NIRS SPM 
 % https://github.com/spm/spm12.git
-addpath('D:\GitHub\spm12') % PC
-% addpath('C:\Users\Jalynn\Documents\GitHub\spm12') % Laptop
+% addpath('D:\GitHub\spm12') % PC
+addpath('C:\Users\Jalynn\Documents\GitHub\spm12') % Laptop
 
 % https://www.nitrc.org/projects/nirs_spm/
-addpath('D:\GitHub\NIRS_SPM_v4_r1') % PC
-% addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1') % Laptop
+% addpath('D:\GitHub\NIRS_SPM_v4_r1') % PC
+addpath('C:\Users\Jalynn\Downloads\NIRS_SPM_v4_r1') % Laptop
 
 %% 2. Load NIRS Files
 
@@ -125,8 +125,8 @@ fprintf('\n--- Loading Participants Complete ---\n')
 
 %% 3. Attach Demographics Metadata
 
-% demo_file = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Demographics\fnirs_demographics_spyV4.csv'; % Laptop
-demo_file = 'D:\GitHub\Mars_fNIRS\Data\Demographics\fnirs_demographics_spy_V5.csv';
+demo_file = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Demographics\fnirs_demographics_spy_V5.csv'; % Laptop
+% demo_file = 'D:\GitHub\Mars_fNIRS\Data\Demographics\fnirs_demographics_spy_V5.csv'; % PC
 demo_table = readtable(demo_file);
 
 for i = 1:length(raw)
@@ -170,8 +170,8 @@ fprintf('Demographics attached for %d participants.\n', length(raw));
 fprintf('\n--- Extracting Events for Each Participant ---\n')
 
 % Load Events File
-event_csv_path = 'D:\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV4.csv'; % PC
-% event_csv_path = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV4.csv'; % Laptop
+% event_csv_path = 'D:\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV4.csv'; % PC
+event_csv_path = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Data\Events\spy_events_all_sessionsV4.csv'; % Laptop
 event_table = readtable(event_csv_path);
 
 % Event data will be grouped by ptp stored in a struct
@@ -698,8 +698,8 @@ fprintf('\nCohort Channel QC Complete: %d participants usable for GLM/ROI analys
     num_usable, num_excluded);
 
 % Write CSV report into Derivatives folder
-% qa_export_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Output\Preprocess'; % Laptop 
-qa_export_dir = 'D:\GitHub\Mars_fNIRS\Output\Preprocess'; % PC
+qa_export_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Output\Preprocess'; % Laptop 
+% qa_export_dir = 'D:\GitHub\Mars_fNIRS\Output\Preprocess'; % PC
 
 if ~exist(qa_export_dir, 'dir')
     mkdir(qa_export_dir);
@@ -784,8 +784,8 @@ fprintf('\n--- Preprocessing Pipeline Complete ---\n')
 %% 12. Save Preprocess Data
 
 % Folder to save the export to
-% export_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Output\Preprocess'; % Laptop
-export_dir = 'D:\GitHub\Mars_fNIRS\Output\Preprocess'; % PC
+export_dir = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS\Output\Preprocess'; % Laptop
+% export_dir = 'D:\GitHub\Mars_fNIRS\Output\Preprocess'; % PC
 
 % Name of the output file
 save_file = fullfile(export_dir, 'Hb_preprocessed_cohort.mat');
