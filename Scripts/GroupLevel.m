@@ -433,7 +433,7 @@ for i = 1:num_ptps
     %     gender_dummy(i) = 0;
     if biosex_raw(i) == 1
         biosex_dummy(i) = 0;
-        biosex_labes(i) = "Female";
+        biosex_labels(i) = "Female";
 
     % Male
     % elseif strcmp(g_str, '2') || startsWith(g_str, 'm')
@@ -2071,18 +2071,17 @@ for c = 1:length(chroms)
                 n_dyads = numel(categories(sub_tbl.Session_ID));
                 n_pairs = n_sub - n_dyads;
 
-                % JALYNN KEPT
                 f1 = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
                 f2 = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
                 f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
-                
+
                 % Fixed-effect-only formulas for fallback
-                f1_lm = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + BioSex_Dummy + Second_Dest_Dummy';
-                f2_lm = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + BioSex_Dummy + Second_Dest_Dummy';
-                f3_lm = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + BioSex_Dummy + Second_Dest_Dummy';
+                f1_lm = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy';
+                f2_lm = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy';
+                f3_lm = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy';
 
                 use_lme = (n_pairs >= 10);
-                model_status = "OK";
+                model_sstatus = "OK";
                 
                 if use_lme
                     lme1 = fitlme(sub_tbl, f1, 'Weights', w_vec, 'FitMethod', 'ML');
@@ -2144,8 +2143,6 @@ for c = 1:length(chroms)
                     model_status = "OK_WLS_Fallback";
                 
                     sc_idx = find(strcmp(lm1.CoefficientNames, 'SC_Centered'));
-                    
-                    % Jalynn added safety check
                     if isempty(sc_idx)
                         error('SC_Centered dropped due to collinearity in WLS fallback (N = %d).', n_sub);
                     end
@@ -2165,12 +2162,11 @@ for c = 1:length(chroms)
                     ci_l_sc = ci_sc(sc_idx, 1);
                     ci_u_sc = ci_sc(sc_idx, 2);
 
-                    % JALYNN ADDED BACK IN
-                    % Extract Elapsed Decision Time covariate slope and p-value from Model 1
-                    time_idx = find(strcmp(lme1.CoefficientNames, 'Time_Centered'));
+                    % Pull Time_Centered from lm1 (NOT lme1)
+                    time_idx = find(strcmp(lm1.CoefficientNames, 'Time_Centered'));
                     if ~isempty(time_idx)
-                        b_time = lme1.Coefficients.Estimate(time_idx);
-                        p_time = lme1.Coefficients.pValue(time_idx);
+                        b_time = lm1.Coefficients.Estimate(time_idx);
+                        p_time = lm1.Coefficients.pValue(time_idx);
                     else
                         b_time = nan;
                         p_time = nan;
@@ -2179,14 +2175,25 @@ for c = 1:length(chroms)
                     aic1 = lm1.ModelCriterion.AIC;
                     aic2 = lm2.ModelCriterion.AIC;
                     aic3 = lm3.ModelCriterion.AIC;
+
+                    % Record WLS fixed terms into full-terms table
+                    coef_tbl = lm1.Coefficients;
+                    ci_all = lm1.coefCI;
+                    for k = 1:height(coef_tbl)
+                        t_val = coef_tbl.tStat(k);
+                        n_pairs = (t_val^2) / (t_val^2 + df_sc);
+                        rq2_chan_full_rows(end+1, :) = [base_meta_ch, { ...
+                            "Fixed", string(lm1.CoefficientNames{k}), ...
+                            coef_tbl.Estimate(k), coef_tbl.SE(k), t_val, df_sc, coef_tbl.pValue(k), ...
+                            ci_all(k, 1), ci_all(k, 2), np2, NaN, model_status ...
+                        }];
+                    end
                 end
-                %%% CARA'S ADDED CONTENT END
 
                 daic2 = aic2 - aic1;
                 daic3 = aic3 - aic1;
                 
-                % Record full Model 1 covariate breakdown and primary RQ2 channel summary row
-                rq2_chan_full_rows = extract_lme_full_terms(lme1, base_meta_ch, rq2_chan_full_rows, "OK");
+                % Use model_status (NOT hardcoded “OK”)
                 rq2_chan_rows(end+1, 1:25) = { ...
                     string(primary_baseline), string(task_str), ...
                     string(Track1_Channel_Long_Table.Timescale(meta_idx)), ...
@@ -2196,8 +2203,26 @@ for c = 1:length(chroms)
                     Track1_Channel_Long_Table.Detector(meta_idx), ...
                     string(Track1_Channel_Long_Table.ROI(meta_idx)), n_sub, ...
                     b_sc, se_sc, t_sc, df_sc, p_sc, ci_l_sc, ci_u_sc, ...
-                    b_time, p_time, aic1, aic2, aic3, daic2, daic3, "OK" ...
+                    b_time, p_time, aic1, aic2, aic3, daic2, daic3, model_status ...
                 };
+                %%% CARA'S ADDED CONTENT END
+
+                % daic2 = aic2 - aic1;
+                % daic3 = aic3 - aic1;
+                % 
+                % % Record full Model 1 covariate breakdown and primary RQ2 channel summary row
+                % rq2_chan_full_rows = extract_lme_full_terms(lme1, base_meta_ch, rq2_chan_full_rows, "OK");
+                % rq2_chan_rows(end+1, 1:25) = { ...
+                %     string(primary_baseline), string(task_str), ...
+                %     string(Track1_Channel_Long_Table.Timescale(meta_idx)), ...
+                %     Track1_Channel_Long_Table.Timescale_Num(meta_idx), ...
+                %     string(chrom_str), chan_num, ...
+                %     Track1_Channel_Long_Table.Source(meta_idx), ...
+                %     Track1_Channel_Long_Table.Detector(meta_idx), ...
+                %     string(Track1_Channel_Long_Table.ROI(meta_idx)), n_sub, ...
+                %     b_sc, se_sc, t_sc, df_sc, p_sc, ci_l_sc, ci_u_sc, ...
+                %     b_time, p_time, aic1, aic2, aic3, daic2, daic3, "OK" ...
+                % };
             catch ME
                 % Record NaN placeholder rows with diagnostic status to preserve rectangular CSV grid
                 err_txt = string(ME.message);
@@ -2237,7 +2262,7 @@ else
 end
 
 fprintf('Track 1 RQ2 Channels complete: %d rows recorded (%d estimated).\n', ...
-    height(Table_RQ2_Channels), sum(Table_RQ2_Channels.Model_Status == "OK"));
+    height(Table_RQ2_Channels), sum(startsWith(Table_RQ2_Channels.Model_Status, "OK")));
 
 %% 9b. Track 2: ROI-Level Precision-Weighted ML Models (RQ2)
 
