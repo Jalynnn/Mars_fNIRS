@@ -2075,13 +2075,13 @@ for c = 1:length(chroms)
                 f2 = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
                 f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
 
-                % Fixed-effect-only formulas for fallback
+                % Fixed-effect-only formulas (matching exact column name: Biosex_Dummy)
                 f1_lm = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy';
                 f2_lm = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy';
                 f3_lm = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy';
 
                 use_lme = (n_pairs >= 10);
-                model_sstatus = "OK";
+                model_status = "OK";
                 
                 if use_lme
                     lme1 = fitlme(sub_tbl, f1, 'Weights', w_vec, 'FitMethod', 'ML');
@@ -2098,9 +2098,6 @@ for c = 1:length(chroms)
                     lme2 = fitlme(sub_tbl, f2, 'Weights', w_vec, 'FitMethod', 'ML');
                     lme3 = fitlme(sub_tbl, f3, 'Weights', w_vec, 'FitMethod', 'ML');
                     
-                    % ... existing lme1 extraction ...
-                    % Aka Jalynn adds back in everything up until the else
-                    % statement
                     sc_idx = find(strcmp(lme1.CoefficientNames, 'SC_Centered'));
                     if isempty(sc_idx)
                         error('SC_Centered dropped due to collinearity (N = %d).', n_sub);
@@ -2133,8 +2130,6 @@ for c = 1:length(chroms)
                     aic3 = lme3.ModelCriterion.AIC;
 
                     rq2_chan_full_rows = extract_lme_full_terms(lme1, base_meta_ch, rq2_chan_full_rows, model_status);
-                
-                % Return to Cara implementation
                 else
                     % Fallback: Precision-weighted WLS (add dyad-clustered sandwich SEs if desired)
                     lm1 = fitlm(sub_tbl, f1_lm, 'Weights', w_vec);
@@ -2152,8 +2147,6 @@ for c = 1:length(chroms)
                     t_sc = lm1.Coefficients.tStat(sc_idx);
                     p_sc = lm1.Coefficients.pValue(sc_idx);
                     df_sc = lm1.DFE;
-
-                    % Jalynn added safety check
                     if df_sc <= 0 || isnan(p_sc)
                         error('Saturated WLS fallback model with zero residual df (N = %d, df = %g).', n_sub, df_sc);
                     end
@@ -2181,12 +2174,12 @@ for c = 1:length(chroms)
                     ci_all = lm1.coefCI;
                     for k = 1:height(coef_tbl)
                         t_val = coef_tbl.tStat(k);
-                        n_pairs = (t_val^2) / (t_val^2 + df_sc);
+                        np2 = (t_val^2) / (t_val^2 + df_sc);
                         rq2_chan_full_rows(end+1, :) = [base_meta_ch, { ...
                             "Fixed", string(lm1.CoefficientNames{k}), ...
                             coef_tbl.Estimate(k), coef_tbl.SE(k), t_val, df_sc, coef_tbl.pValue(k), ...
                             ci_all(k, 1), ci_all(k, 2), np2, NaN, model_status ...
-                        }];
+                            }];
                     end
                 end
 
