@@ -309,7 +309,9 @@ num_ptps = length(SubjStats_HRF);
 ptp_id = zeros(num_ptps, 1); % Ptp ID
 session_id = cell(num_ptps, 1); % Dyad ID
 age_raw = nan(num_ptps, 1); % Ptp age in years
-gender_raw = cell(num_ptps, 1); % Gender 0,1,2
+% gender_raw = cell(num_ptps, 1); % Gender 0,1,2
+% Confirm gender_raw is not being used anymore - corrected for biosex
+biosex_raw = cell(num_ptps, 1); % Sex 0,1
 team_perf_raw = nan(num_ptps, 1); % Team Performance 0 or 1
 intended_both = nan(num_ptps, 1); % Indicator of second destination
 exec_cert_final = nan(num_ptps, 1); % Unsigned individual certainty
@@ -338,7 +340,21 @@ for i = 1:num_ptps
     if d.iskey('participant_id'), ptp_id(i) = d('participant_id'); else, ptp_id(i) = i; end
     if d.iskey('session_id'), session_id{i} = char(string(d('session_id'))); else, session_id{i} = sprintf('dyad_%02d', ceil(i/2)); end
     if d.iskey('age'), age_raw(i) = d('age'); end
-    if d.iskey('gender'), gender_raw{i} = char(string(d('gender'))); end
+    % if d.iskey('gender'), gender_raw{i} = char(string(d('gender'))); end
+    % Replace gender with biosex
+    if d.iskey('biosex')
+        val = d('biosex');
+        if isnumeric(val) || islogical(val)
+            biosex_raw(i) = double(val);
+        else
+            s = lower(strtrim(string(val)));
+            if ismember(s, ["0", "f", "female"])
+                biosex_raw(i) = 0;
+            elseif ismember(s, ["1", "m", "male"])
+                biosex_raw(i) = 1;
+            end
+        end
+    end
     if d.iskey('team_performance'), team_perf_raw(i) = d('team_performance'); end
     if d.iskey('intended_both'), intended_both(i) = d('intended_both'); end
     if d.iskey('exec_cert_final'), exec_cert_final(i) = d('exec_cert_final'); end
@@ -397,33 +413,49 @@ fprintf('Age centered around cohort mean: %.2f years (range: %d - %d).\n', ...
 
 % Coding: 0 = Female (ref), 1 = Male, 2 = Other
 % Pre-allocate string labels and reference codes
-gender_labels = strings(num_ptps, 1);
-gender_dummy = zeros(num_ptps, 1);
+% gender_labels = strings(num_ptps, 1);
+biosex_labels = strings(num_ptps 1);
+
+% gender_dummy = zeros(num_ptps, 1);
+biosex_dummy = nan(num_ptps, 1);
 
 % For each ptp, normalize demo gender code to standard categories
 for i = 1:num_ptps
     % Extract gender as lower case
-    g_str = lower(strtrim(gender_raw{i}));
+    % g_str = lower(strtrim(gender_raw{i}));
+
+    if isnan(biosex_raw(i))
+        biosex_labels(i) = <missing>;
 
     % Female
-    if strcmp(g_str, '1') || startsWith(g_str, 'f')
-        gender_labels(i) = "Female";
-        gender_dummy(i) = 0;
+    % if strcmp(g_str, '1') || startsWith(g_str, 'f')
+    %     gender_labels(i) = "Female";
+    %     gender_dummy(i) = 0;
+    elseif biosex_raw(i) == 0
+        biosex_dummy(i) = 0;
+        biosex_labes(i) = "Female";
 
     % Male
-    elseif strcmp(g_str, '2') || startsWith(g_str, 'm')
-        gender_labels(i) = "Male";
-        gender_dummy(i) = 1;
+    % elseif strcmp(g_str, '2') || startsWith(g_str, 'm')
+    %     gender_labels(i) = "Male";
+    %     gender_dummy(i) = 1;
+    elseif biosex_raw(i) == 1
+        biosex_dummy(i) = 1;
+        biosex_labels(i) = "Male";
     
     % Other
+    % else
+    %     gender_labels(i) = "Other";
+    %     gender_dummy(i) = 2;
+    % end
     else
-        gender_labels(i) = "Other";
-        gender_dummy(i) = 2;
+        error('Unexpected biosex value (%g) for participant %d; expected 0 or 1.', biosex_raw(i), ptp_od(i));
     end
 end
 
 % Cast to categorical with female explicitly declared first as reference
-gender_cat = categorical(gender_labels, {'Female', 'Male', 'Other'});
+% gender_cat = categorical(gender_labels, {'Female', 'Male', 'Other'});
+biosex_cat = categorical(biosex_labels, {'Female', 'Male'});
 
 %% 5c. RQ1 Team Performance
 
@@ -480,19 +512,24 @@ end
 
 % Combine all raw and centered variables into a master 59 ptp table
 Cohort_Covariates = table(ptp_id, session_id, age_raw, age_centered, ...
-    gender_cat, gender_dummy, team_perf_raw, team_perf_dummy, ...
+    biosex_cat, biosex_dummy, ...
+    team_perf_raw, team_perf_dummy, ...
     exec_cert_final, cert_centered, ...
     exec_cert_signed, sc_centered, ...
     exec_cert_time, time_centered, ...
     n_switches_raw, switches_centered, ...
     second_dest_dummy, ...
     'VariableNames', {'Participant_ID', 'Session_ID', 'Age', 'Age_Centered', ...
-                      'Gender', 'Gender_Dummy', 'Team_Perf', 'Team_Perf_Dummy', ...
+                      'Biosex', 'Biosex_Dummy', ...
+                      'Team_Perf', 'Team_Perf_Dummy', ...
                       'Certainty', 'Certainty_Centered', ...
                       'Signed_Certainty', 'SC_Centered', ...
                       'Elapsed_Time', 'Time_Centered', ...
                       'N_Switches', 'Switches_Centered', ...
                       'Intended_Both'});
+
+% gender_cat, gender_dummy, ...
+% 'Gender', 'Gender_Dummy', ...
 
 % Preview the first 8 rows of the table in the command window
 fprintf('Cohort Covariate Table created for %d participants:\n', height(Cohort_Covariates));
@@ -605,7 +642,8 @@ for ct = 1:length(contrast_types)
             sub_id = Cohort_Covariates.Participant_ID(p); % Ptp id
             sess_id = string(Cohort_Covariates.Session_ID(p)); % Dyad id
             age_c = Cohort_Covariates.Age_Centered(p); % age in years mean centered
-            g_dum = double(Cohort_Covariates.Gender_Dummy(p)); % numeric gender assigned
+            % g_dum = double(Cohort_Covariates.Gender_Dummy(p)); % numeric gender assigned
+            g_dum = double(Cohort_Covariates.Biosex_Dummy(p)); % replace with biosex
             t_perf = Cohort_Covariates.Team_Perf_Dummy(p); % team performance true or decoy 1 or 0
             cert_c = Cohort_Covariates.Certainty_Centered(p); % mean centered unsigned certainty indiv
             sc_c = Cohort_Covariates.SC_Centered(p); % mean centered signed certainty indiv
@@ -634,7 +672,7 @@ for ct = 1:length(contrast_types)
                 t_merged.tstat, ... % first level t-stat
                 t_merged.p, ... % first level p-val
                 repmat(age_c, n_rows, 1), ... % age centered covariate
-                repmat(g_dum, n_rows, 1), ... % gender covariate
+                repmat(g_dum, n_rows, 1), ... % gender covariate % replaced with biosex
                 repmat(t_perf, n_rows, 1), ... % team performance 
                 repmat(cert_c, n_rows, 1), ... % unsigned certainty
                 repmat(sc_c, n_rows, 1), ... % signed certainty
@@ -645,10 +683,12 @@ for ct = 1:length(contrast_types)
                     'Participant_ID', 'Session_ID', 'Baseline_Type', 'Task_Contrast', ...
                     'Timescale', 'Timescale_Num', 'Chromophore', 'Channel', 'Source', 'Detector', ...
                     'ROI', 'MNI_X', 'MNI_Y', 'MNI_Z', 'Beta', 'SE', 'T_Stat', 'P_Val', ...
-                    'Age_Centered', 'Gender_Dummy', 'Team_Perf_Dummy', 'Certainty_Centered', ...
+                    'Age_Centered', 'Biosex_Dummy', 'Team_Perf_Dummy', 'Certainty_Centered', ...
                     'SC_Centered', 'Time_Centered', 'Switches_Centered', 'Second_Dest_Dummy' ...
                 } ...
             );
+
+            % Replaced Gender_Dummy with Biosex_Dummy
             
             % append this ptp / task to the cell outside loops
             track1_cell{end+1} = block_tbl;
@@ -746,7 +786,7 @@ Track2_ROI_Long_Table = table( ...
     grp_p_id, grp_s_id, grp_base, grp_task, grp_tscale, grp_tnum, grp_chrom, grp_roi, ...
     chan_cnt, mean_beta, mean_se, mean_t, ...
     Cohort_Covariates.Age_Centered(cov_idx), ...
-    double(Cohort_Covariates.Gender_Dummy(cov_idx)), ...
+    double(Cohort_Covariates.Biosex_Dummy(cov_idx)), ...
     Cohort_Covariates.Team_Perf_Dummy(cov_idx), ...
     Cohort_Covariates.Certainty_Centered(cov_idx), ...
     Cohort_Covariates.SC_Centered(cov_idx), ...
@@ -757,12 +797,14 @@ Track2_ROI_Long_Table = table( ...
         'Participant_ID', 'Session_ID', 'Baseline_Type', 'Task_Contrast', ...
         'Timescale', 'Timescale_Num', 'Chromophore', 'ROI', ...
         'Num_Channels', 'Beta_ROI', 'SE_ROI', 'T_Stat_ROI', ...
-        'Age_Centered', 'Gender_Dummy', 'Team_Perf_Dummy', ...
+        'Age_Centered', 'Biosex_Dummy', 'Team_Perf_Dummy', ...
         'Certainty_Centered', 'SC_Centered', 'Time_Centered', ...
         'Switches_Centered', ...
         'Second_Dest_Dummy' ...
     } ...
 );
+
+% double(Cohort_Covariates.Gender_Dummy(cov_idx)), ...
 
 % Command window update for length of rows and cols
 fprintf('Track 2 Long Table generated (HBO, HBR, HBDIFF): %d rows x %d columns.\n', ...
@@ -775,9 +817,11 @@ fprintf('Casting grouping and model factors to categorical...\n');
 
 % Explicitly set reference levels for dummy-coded categorical predictors (Female = ref, NoSecond = ref)
 % Convert numeric dummy to categorical; gender has 0,1,2 and
-% seconddestdummy has 0 and 1
-Track1_Channel_Long_Table.Gender_Dummy      = categorical(double(Track1_Channel_Long_Table.Gender_Dummy), [0, 1, 2], {'Female', 'Male', 'Other'});
-Track2_ROI_Long_Table.Gender_Dummy          = categorical(double(Track2_ROI_Long_Table.Gender_Dummy), [0, 1, 2], {'Female', 'Male', 'Other'});
+% seconddestdummy has 0 and 1 BUT now gender replaced with biosex 0,1
+% Track1_Channel_Long_Table.Gender_Dummy      = categorical(double(Track1_Channel_Long_Table.Gender_Dummy), [0, 1, 2], {'Female', 'Male', 'Other'});
+% Track2_ROI_Long_Table.Gender_Dummy          = categorical(double(Track2_ROI_Long_Table.Gender_Dummy), [0, 1, 2], {'Female', 'Male', 'Other'});
+Track1_Channel_Long_Table.Biosex_Dummy      = categorical(double(Track1_Channel_Long_Table.Biosex_Dummy), [0, 1], {'Female', 'Male'});
+Track2_ROI_Long_Table.Biosex_Dummy          = categorical(double(Track2_ROI_Long_Table.Biosex_Dummy), [0, 1], {'Female', 'Male'});
 Track1_Channel_Long_Table.Second_Dest_Dummy = categorical(double(Track1_Channel_Long_Table.Second_Dest_Dummy), [0, 1], {'NoSecond', 'Second'});
 Track2_ROI_Long_Table.Second_Dest_Dummy     = categorical(double(Track2_ROI_Long_Table.Second_Dest_Dummy), [0, 1], {'NoSecond', 'Second'});
 
@@ -1092,7 +1136,7 @@ disp(head(sig_roi(:, {'Task_Contrast', 'Chromophore', 'ROI', 'Beta_0', 'T_Stat',
 % Evaluates whether cortical hemodynamic responses differ between teams that selected the
 % true target site first (Team_Perf_Dummy = 1) vs. the decoy site first (Team_Perf_Dummy = 0),
 % controlling for mean-centered age, biological sex, second-destination visit, and dyadic clustering:
-% * Formula: Beta ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)
+% * Formula: Beta ~ 1 + Team_Perf_Dummy + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)
 % * Weights: Normalized inverse-variance precision weights w_i = (1 / SE_i^2) / mean(1 / SE^2)
 
 % Command window update prompt
@@ -1201,7 +1245,7 @@ for c = 1:length(chroms)
             % Extract only required model columns and perform listwise 
             % deletion of missing values
             sub_tbl = Track1_Channel_Long_Table(sub_idx, :);
-            req_vars = {'Beta', 'SE', 'Team_Perf_Dummy', 'Age_Centered', 'Gender_Dummy', 'Second_Dest_Dummy', 'Session_ID'};
+            req_vars = {'Beta', 'SE', 'Team_Perf_Dummy', 'Age_Centered', 'Biosex_Dummy', 'Second_Dest_Dummy', 'Session_ID'};
             sub_tbl = sub_tbl(:, intersect(req_vars, sub_tbl.Properties.VariableNames));
             sub_tbl = rmmissing(sub_tbl);
             
@@ -1240,17 +1284,17 @@ for c = 1:length(chroms)
                 
                 % Drop unobserved categorical levels so design matrices 
                 % remain full-rank
-                sub_tbl.Gender_Dummy = removecats(categorical(sub_tbl.Gender_Dummy));
+                sub_tbl.Biosex_Dummy = removecats(categorical(sub_tbl.Biosex_Dummy));
                 sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
                 sub_tbl.Session_ID = removecats(categorical(sub_tbl.Session_ID));
                 
                 % Include Second_Dest_Dummy covariate only when both levels (0 and 1) occur in this task subset
                 % MODEL 2 RQ1 for channels
                 % if numel(categories(sub_tbl.Second_Dest_Dummy)) > 1
-                formula_str = 'Beta ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                formula_str = 'Beta ~ 1 + Team_Perf_Dummy + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
                 % else
                 %     fprintf('Else statement entered MODEL 2 RQ1 Channels');
-                %     formula_str = 'Beta ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+                %     formula_str = 'Beta ~ 1 + Team_Perf_Dummy + Age_Centered + Biosex_Dummy + (1 | Session_ID)';
                 % end
                 
                 % Fit precision-weighted REML linear mixed-effects model with dyad random intercept
@@ -1369,7 +1413,7 @@ for c = 1:length(chroms)
             
             % Extract required model columns and perform listwise deletion of missing values
             sub_tbl = Track2_ROI_Long_Table(sub_idx, :);
-            req_vars = {'Beta_ROI', 'SE_ROI', 'Team_Perf_Dummy', 'Age_Centered', 'Gender_Dummy', 'Second_Dest_Dummy', 'Session_ID'};
+            req_vars = {'Beta_ROI', 'SE_ROI', 'Team_Perf_Dummy', 'Age_Centered', 'Biosex_Dummy', 'Second_Dest_Dummy', 'Session_ID'};
             sub_tbl = sub_tbl(:, intersect(req_vars, sub_tbl.Properties.VariableNames));
             sub_tbl = rmmissing(sub_tbl);
             
@@ -1402,17 +1446,17 @@ for c = 1:length(chroms)
                 w_vec = raw_w / mean(raw_w);
                 
                 % Drop unobserved categorical levels prior to design matrix construction
-                sub_tbl.Gender_Dummy = removecats(categorical(sub_tbl.Gender_Dummy));
+                sub_tbl.Biosex_Dummy = removecats(categorical(sub_tbl.Biosex_Dummy));
                 sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
                 sub_tbl.Session_ID = removecats(categorical(sub_tbl.Session_ID));
                 
                 % Include Second_Dest_Dummy covariate only when both levels occur in this task subset
                 % MODEL 2 RQ1 but for ROI instead of channels
                 % if numel(categories(sub_tbl.Second_Dest_Dummy)) > 1
-                formula_str = 'Beta_ROI ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                formula_str = 'Beta_ROI ~ 1 + Team_Perf_Dummy + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
                 % else
                 %     fprint('else statement entered model 2 rq1 roi');
-                %     formula_str = 'Beta_ROI ~ 1 + Team_Perf_Dummy + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+                %     formula_str = 'Beta_ROI ~ 1 + Team_Perf_Dummy + Age_Centered + Biosex_Dummy + (1 | Session_ID)';
                 % end
                 
                 % Fit precision-weighted REML linear mixed-effects model on ROI-averaged contrast betas
@@ -1644,7 +1688,7 @@ for c = 1:length(chroms)
             meta_idx = find(sub_idx, 1, 'first');
             if isempty(meta_idx), continue; end
 
-            sub_tbl = Track1_Channel_Long_Table(sub_idx, {'Beta', 'SE', 'Team_Perf_Dummy', 'Switches_Centered', 'Age_Centered', 'Gender_Dummy', 'Second_Dest_Dummy', 'Session_ID'});
+            sub_tbl = Track1_Channel_Long_Table(sub_idx, {'Beta', 'SE', 'Team_Perf_Dummy', 'Switches_Centered', 'Age_Centered', 'Biosex_Dummy', 'Second_Dest_Dummy', 'Session_ID'});
             sub_tbl = rmmissing(sub_tbl);
 
             try
@@ -1662,11 +1706,11 @@ for c = 1:length(chroms)
 
                 raw_w = 1 ./ max(sub_tbl.SE .^ 2, 1e-6);
                 w_vec = raw_w / mean(raw_w);
-                sub_tbl.Gender_Dummy      = removecats(categorical(sub_tbl.Gender_Dummy));
+                sub_tbl.Biosex_Dummy      = removecats(categorical(sub_tbl.Biosex_Dummy));
                 sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
                 sub_tbl.Session_ID        = removecats(categorical(sub_tbl.Session_ID));
 
-                lme = fitlme(sub_tbl, 'Beta ~ 1 + Team_Perf_Dummy + Switches_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)', 'Weights', w_vec);
+                lme = fitlme(sub_tbl, 'Beta ~ 1 + Team_Perf_Dummy + Switches_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)', 'Weights', w_vec);
                 t_idx = find(strcmp(lme.CoefficientNames, 'Team_Perf_Dummy'));
                 if isempty(t_idx)
                     error('Team_Perf_Dummy dropped due to collinearity (N = %d).', n_sub);
@@ -1726,7 +1770,7 @@ for c = 1:length(chroms)
             meta_idx = find(sub_idx, 1, 'first');
             if isempty(meta_idx), continue; end
 
-            sub_tbl = Track2_ROI_Long_Table(sub_idx, {'Beta_ROI', 'SE_ROI', 'Team_Perf_Dummy', 'Switches_Centered', 'Age_Centered', 'Gender_Dummy', 'Second_Dest_Dummy', 'Session_ID'});
+            sub_tbl = Track2_ROI_Long_Table(sub_idx, {'Beta_ROI', 'SE_ROI', 'Team_Perf_Dummy', 'Switches_Centered', 'Age_Centered', 'Biosex_Dummy', 'Second_Dest_Dummy', 'Session_ID'});
             sub_tbl = rmmissing(sub_tbl);
 
             try
@@ -1735,11 +1779,11 @@ for c = 1:length(chroms)
                 end
                 raw_w = 1 ./ max(sub_tbl.SE_ROI .^ 2, 1e-6);
                 w_vec = raw_w / mean(raw_w);
-                sub_tbl.Gender_Dummy      = removecats(categorical(sub_tbl.Gender_Dummy));
+                sub_tbl.Biosex_Dummy      = removecats(categorical(sub_tbl.Biosex_Dummy));
                 sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
                 sub_tbl.Session_ID        = removecats(categorical(sub_tbl.Session_ID));
 
-                lme = fitlme(sub_tbl, 'Beta_ROI ~ 1 + Team_Perf_Dummy + Switches_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)', 'Weights', w_vec);
+                lme = fitlme(sub_tbl, 'Beta_ROI ~ 1 + Team_Perf_Dummy + Switches_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)', 'Weights', w_vec);
                 t_idx = find(strcmp(lme.CoefficientNames, 'Team_Perf_Dummy'));
                 if isempty(t_idx), error('Team_Perf_Dummy dropped due to collinearity.'); end
                 ci = lme.coefCI;
@@ -1837,9 +1881,9 @@ end
 
 % Evaluates whether cortical hemodynamic responses scale with individual decision certainty,
 % comparing three nested Maximum Likelihood (ML) specifications per channel and ROI:
-%   - Model 1 (Signed Certainty, Primary) : Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)
-%   - Model 2 (Unsigned Certainty)        : Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)
-%   - Model 3 (Dual Certainty)            : Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)
+%   - Model 1 (Signed Certainty, Primary) : Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)
+%   - Model 2 (Unsigned Certainty)        : Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)
+%   - Model 3 (Dual Certainty)            : Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)
 %   Weights: Normalized inverse-variance precision weights w_i = (1 / SE_i^2) / mean(1 / SE^2)
 %   FitMethod: 'ML' (Maximum Likelihood) so AIC comparisons across different fixed-effect structures are valid
 
@@ -1927,7 +1971,7 @@ for c = 1:length(chroms)
             % Extract only required model columns and perform listwise deletion of missing values
             sub_tbl = Track1_Channel_Long_Table(sub_idx, :);
             req_vars = {'Beta', 'SE', 'SC_Centered', 'Certainty_Centered', 'Time_Centered', ...
-                        'Age_Centered', 'Gender_Dummy', 'Second_Dest_Dummy', 'Session_ID'};
+                        'Age_Centered', 'Biosex_Dummy', 'Second_Dest_Dummy', 'Session_ID'};
             sub_tbl = sub_tbl(:, intersect(req_vars, sub_tbl.Properties.VariableNames));
             sub_tbl = rmmissing(sub_tbl);
             
@@ -1961,21 +2005,21 @@ for c = 1:length(chroms)
                 w_vec = raw_w / mean(raw_w);
                 
                 % Drop unobserved categorical levels so design matrices remain full-rank
-                sub_tbl.Gender_Dummy = removecats(categorical(sub_tbl.Gender_Dummy));
+                sub_tbl.Biosex_Dummy = removecats(categorical(sub_tbl.Biosex_Dummy));
                 sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
                 sub_tbl.Session_ID = removecats(categorical(sub_tbl.Session_ID));
                 
                 % Include Second_Dest_Dummy covariate only when both levels (0 and 1) occur in this task subset
                 has_second = numel(categories(sub_tbl.Second_Dest_Dummy)) > 1;
                 % if has_second
-                f1 = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
-                f2 = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
-                f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                f1 = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                f2 = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
                 % else
                 %     fprint('else statement entered model 2 rq2 channel'); 
-                %     f1 = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
-                %     f2 = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
-                %     f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+                %     f1 = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Biosex_Dummy + (1 | Session_ID)';
+                %     f2 = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + (1 | Session_ID)';
+                %     f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + (1 | Session_ID)';
                 % end
                 
                 % Fit all three nested certainty models via Maximum Likelihood ('ML') for AIC comparison
@@ -2107,7 +2151,7 @@ for c = 1:length(chroms)
             % Extract required model columns and perform listwise deletion of missing values
             sub_tbl  = Track2_ROI_Long_Table(sub_idx, :);
             req_vars = {'Beta_ROI', 'SE_ROI', 'SC_Centered', 'Certainty_Centered', 'Time_Centered', ...
-                        'Age_Centered', 'Gender_Dummy', 'Second_Dest_Dummy', 'Session_ID'};
+                        'Age_Centered', 'Biosex_Dummy', 'Second_Dest_Dummy', 'Session_ID'};
             sub_tbl  = sub_tbl(:, intersect(req_vars, sub_tbl.Properties.VariableNames));
             sub_tbl  = rmmissing(sub_tbl);
             
@@ -2138,21 +2182,21 @@ for c = 1:length(chroms)
                 w_vec = raw_w / mean(raw_w);
                 
                 % Drop unobserved categorical levels prior to design matrix construction
-                sub_tbl.Gender_Dummy = removecats(categorical(sub_tbl.Gender_Dummy));
+                sub_tbl.Biosex_Dummy = removecats(categorical(sub_tbl.Biosex_Dummy));
                 sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
                 sub_tbl.Session_ID = removecats(categorical(sub_tbl.Session_ID));
                 
                 % Include Second_Dest_Dummy covariate only when both levels occur in this task subset
                 has_second = numel(categories(sub_tbl.Second_Dest_Dummy)) > 1;
                 % if has_second
-                f1 = 'Beta_ROI ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
-                f2 = 'Beta_ROI ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
-                f3 = 'Beta_ROI ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                f1 = 'Beta_ROI ~ 1 + SC_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                f2 = 'Beta_ROI ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                f3 = 'Beta_ROI ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
                 % else
                 %     fprint('else statement entered model 2 rq2 roi');
-                %     f1 = 'Beta_ROI ~ 1 + SC_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
-                %     f2 = 'Beta_ROI ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
-                %     f3 = 'Beta_ROI ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Gender_Dummy + (1 | Session_ID)';
+                %     f1 = 'Beta_ROI ~ 1 + SC_Centered + Time_Centered + Age_Centered + Biosex_Dummy + (1 | Session_ID)';
+                %     f2 = 'Beta_ROI ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + (1 | Session_ID)';
+                %     f3 = 'Beta_ROI ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + (1 | Session_ID)';
                 % end
                 
                 % Fit all three nested certainty models via Maximum Likelihood ('ML') on ROI averages
@@ -2395,7 +2439,7 @@ for c = 1:length(chroms)
             meta_idx = find(sub_idx, 1, 'first');
             if isempty(meta_idx), continue; end
 
-            sub_tbl = Track1_Channel_Long_Table(sub_idx, {'Beta', 'SE', 'SC_Centered', 'Certainty_Centered', 'Switches_Centered', 'Time_Centered', 'Age_Centered', 'Gender_Dummy', 'Second_Dest_Dummy', 'Session_ID'});
+            sub_tbl = Track1_Channel_Long_Table(sub_idx, {'Beta', 'SE', 'SC_Centered', 'Certainty_Centered', 'Switches_Centered', 'Time_Centered', 'Age_Centered', 'Biosex_Dummy', 'Second_Dest_Dummy', 'Session_ID'});
             sub_tbl = rmmissing(sub_tbl);
 
             try
@@ -2412,13 +2456,13 @@ for c = 1:length(chroms)
 
                 raw_w = 1 ./ max(sub_tbl.SE .^ 2, 1e-6);
                 w_vec = raw_w / mean(raw_w);
-                sub_tbl.Gender_Dummy      = removecats(categorical(sub_tbl.Gender_Dummy));
+                sub_tbl.Biosex_Dummy      = removecats(categorical(sub_tbl.Biosex_Dummy));
                 sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
                 sub_tbl.Session_ID        = removecats(categorical(sub_tbl.Session_ID));
 
-                f1 = 'Beta ~ 1 + SC_Centered + Switches_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
-                f2 = 'Beta ~ 1 + Certainty_Centered + Switches_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
-                f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Switches_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                f1 = 'Beta ~ 1 + SC_Centered + Switches_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                f2 = 'Beta ~ 1 + Certainty_Centered + Switches_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Switches_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
 
                 lme1 = fitlme(sub_tbl, f1, 'Weights', w_vec, 'FitMethod', 'ML');
                 lme2 = fitlme(sub_tbl, f2, 'Weights', w_vec, 'FitMethod', 'ML');
@@ -2488,7 +2532,7 @@ for c = 1:length(chroms)
             meta_idx = find(sub_idx, 1, 'first');
             if isempty(meta_idx), continue; end
 
-            sub_tbl = Track2_ROI_Long_Table(sub_idx, {'Beta_ROI', 'SE_ROI', 'SC_Centered', 'Certainty_Centered', 'Switches_Centered', 'Time_Centered', 'Age_Centered', 'Gender_Dummy', 'Second_Dest_Dummy', 'Session_ID'});
+            sub_tbl = Track2_ROI_Long_Table(sub_idx, {'Beta_ROI', 'SE_ROI', 'SC_Centered', 'Certainty_Centered', 'Switches_Centered', 'Time_Centered', 'Age_Centered', 'Biosex_Dummy', 'Second_Dest_Dummy', 'Session_ID'});
             sub_tbl = rmmissing(sub_tbl);
 
             try
@@ -2505,13 +2549,13 @@ for c = 1:length(chroms)
 
                 raw_w = 1 ./ max(sub_tbl.SE_ROI .^ 2, 1e-6);
                 w_vec = raw_w / mean(raw_w);
-                sub_tbl.Gender_Dummy      = removecats(categorical(sub_tbl.Gender_Dummy));
+                sub_tbl.Biosex_Dummy      = removecats(categorical(sub_tbl.Biosex_Dummy));
                 sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
                 sub_tbl.Session_ID        = removecats(categorical(sub_tbl.Session_ID));
 
-                f1 = 'Beta_ROI ~ 1 + SC_Centered + Switches_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
-                f2 = 'Beta_ROI ~ 1 + Certainty_Centered + Switches_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
-                f3 = 'Beta_ROI ~ 1 + SC_Centered + Certainty_Centered + Switches_Centered + Time_Centered + Age_Centered + Gender_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                f1 = 'Beta_ROI ~ 1 + SC_Centered + Switches_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                f2 = 'Beta_ROI ~ 1 + Certainty_Centered + Switches_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                f3 = 'Beta_ROI ~ 1 + SC_Centered + Certainty_Centered + Switches_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
 
                 lme1 = fitlme(sub_tbl, f1, 'Weights', w_vec, 'FitMethod', 'ML');
                 lme2 = fitlme(sub_tbl, f2, 'Weights', w_vec, 'FitMethod', 'ML');
