@@ -6,7 +6,9 @@
 clc;
 
 % Define paths (Active unmerged pipeline)
-project_root = 'D:\GitHub\Mars_fNIRS';
+% project_root = 'D:\GitHub\Mars_fNIRS'; % PC
+project_root = 'C:\Users\Jalynn\Documents\GitHub\Mars_fNIRS'; % Laptop
+
 group_dir    = fullfile(project_root, 'Output', 'GroupLevel');
 sig_dir      = fullfile(group_dir, 'RQ_Sig');
 fig_dir      = fullfile(group_dir, 'Cortical_Plots');
@@ -30,13 +32,15 @@ sig_files = { ...
 %% Load Canonical Cortical Mesh
 % 1. Ensure SPM12 is on path for gifti and canonical surfaces
 if isempty(which('gifti'))
-    addpath('D:\GitHub\spm12');
+    % addpath('D:\GitHub\spm12'); % PC
+    addpath('C:\Users\Jalynn\Documents\GitHub\spm12'); % Laptop
 end
 
 % 2. Locate canonical cortical surface
 surf_file = which('cortex_20484.surf.gii');
 if isempty(surf_file)
-    surf_file = 'D:\GitHub\spm12\canonical\cortex_20484.surf.gii';
+    % surf_file = 'D:\GitHub\spm12\canonical\cortex_20484.surf.gii'; % PC
+    surf_file = 'C:\Users\Jalynn\Documents\GitHub\spm12\canonical\cortex_20484.surf.gii'; % Laptop
 end
 
 if ~exist(surf_file, 'file')

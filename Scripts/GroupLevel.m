@@ -311,7 +311,7 @@ session_id = cell(num_ptps, 1); % Dyad ID
 age_raw = nan(num_ptps, 1); % Ptp age in years
 % gender_raw = cell(num_ptps, 1); % Gender 0,1,2
 % Confirm gender_raw is not being used anymore - corrected for biosex
-biosex_raw = cell(num_ptps, 1); % Sex 0,1
+biosex_raw = nan(num_ptps, 1); % Sex 0,1
 team_perf_raw = nan(num_ptps, 1); % Team Performance 0 or 1
 intended_both = nan(num_ptps, 1); % Indicator of second destination
 exec_cert_final = nan(num_ptps, 1); % Unsigned individual certainty
@@ -414,7 +414,7 @@ fprintf('Age centered around cohort mean: %.2f years (range: %d - %d).\n', ...
 % Coding: 0 = Female (ref), 1 = Male, 2 = Other
 % Pre-allocate string labels and reference codes
 % gender_labels = strings(num_ptps, 1);
-biosex_labels = strings(num_ptps 1);
+biosex_labels = strings(num_ptps, 1);
 
 % gender_dummy = zeros(num_ptps, 1);
 biosex_dummy = nan(num_ptps, 1);
@@ -424,14 +424,14 @@ for i = 1:num_ptps
     % Extract gender as lower case
     % g_str = lower(strtrim(gender_raw{i}));
 
-    if isnan(biosex_raw(i))
-        biosex_labels(i) = <missing>;
+    % if isnan(biosex_raw(i))
+    %     biosex_labels(i) = <missing>;
 
     % Female
     % if strcmp(g_str, '1') || startsWith(g_str, 'f')
     %     gender_labels(i) = "Female";
     %     gender_dummy(i) = 0;
-    elseif biosex_raw(i) == 0
+    if biosex_raw(i) == 1
         biosex_dummy(i) = 0;
         biosex_labes(i) = "Female";
 
@@ -439,7 +439,7 @@ for i = 1:num_ptps
     % elseif strcmp(g_str, '2') || startsWith(g_str, 'm')
     %     gender_labels(i) = "Male";
     %     gender_dummy(i) = 1;
-    elseif biosex_raw(i) == 1
+    elseif biosex_raw(i) == 2
         biosex_dummy(i) = 1;
         biosex_labels(i) = "Male";
     
@@ -449,7 +449,7 @@ for i = 1:num_ptps
     %     gender_dummy(i) = 2;
     % end
     else
-        error('Unexpected biosex value (%g) for participant %d; expected 0 or 1.', biosex_raw(i), ptp_od(i));
+        error('Unexpected biosex value (%g) for participant %d; expected 0 or 1.', biosex_raw(i), ptp_id(i));
     end
 end
 
