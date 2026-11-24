@@ -2009,61 +2009,179 @@ for c = 1:length(chroms)
                 sub_tbl.Second_Dest_Dummy = removecats(categorical(sub_tbl.Second_Dest_Dummy));
                 sub_tbl.Session_ID = removecats(categorical(sub_tbl.Session_ID));
                 
-                % Include Second_Dest_Dummy covariate only when both levels (0 and 1) occur in this task subset
-                has_second = numel(categories(sub_tbl.Second_Dest_Dummy)) > 1;
-                % if has_second
+                % CARA RECS
+                % % Include Second_Dest_Dummy covariate only when both levels (0 and 1) occur in this task subset
+                % has_second = numel(categories(sub_tbl.Second_Dest_Dummy)) > 1;
+                % % if has_second
+                % f1 = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                % f2 = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                % f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
+                % % else
+                % %     fprint('else statement entered model 2 rq2 channel'); 
+                % %     f1 = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Biosex_Dummy + (1 | Session_ID)';
+                % %     f2 = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + (1 | Session_ID)';
+                % %     f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + (1 | Session_ID)';
+                % % end
+                % 
+                % 
+                % % Fit all three nested certainty models via Maximum Likelihood ('ML') for AIC comparison
+                % % MODEL 3 RQ2 for channels
+                % lme1 = fitlme(sub_tbl, f1, 'Weights', w_vec, 'FitMethod', 'ML');
+                % lme2 = fitlme(sub_tbl, f2, 'Weights', w_vec, 'FitMethod', 'ML');
+                % lme3 = fitlme(sub_tbl, f3, 'Weights', w_vec, 'FitMethod', 'ML');
+                % 
+                % % Locate the fixed-effect coefficient row for primary predictor SC_Centered in Model 1
+                % sc_idx = find(strcmp(lme1.CoefficientNames, 'SC_Centered'));
+                % if isempty(sc_idx)
+                %     error('SC_Centered dropped due to collinearity (N = %d).', n_sub);
+                % end
+                % 
+                % % Extract Signed Certainty (SC_Centered) fixed-effect parameters and 95% confidence bounds
+                % b_sc = lme1.Coefficients.Estimate(sc_idx);
+                % se_sc = lme1.Coefficients.SE(sc_idx);
+                % t_sc = lme1.Coefficients.tStat(sc_idx);
+                % p_sc = lme1.Coefficients.pValue(sc_idx);
+                % 
+                % df_sc = lme1.Coefficients.DF(sc_idx);
+                % if df_sc <= 0 || isnan(p_sc)
+                %     error('Saturated model with zero residual degrees of freedom (N = %d, df = %g).', n_sub, df_sc);
+                % end
+                % 
+                % ci_sc = lme1.coefCI;
+                % ci_l_sc = ci_sc(sc_idx, 1);
+                % ci_u_sc = ci_sc(sc_idx, 2);
+                % 
+                % % Extract Elapsed Decision Time covariate slope and p-value from Model 1
+                % time_idx = find(strcmp(lme1.CoefficientNames, 'Time_Centered'));
+                % if ~isempty(time_idx)
+                %     b_time = lme1.Coefficients.Estimate(time_idx);
+                %     p_time = lme1.Coefficients.pValue(time_idx);
+                % else
+                %     b_time = nan;
+                %     p_time = nan;
+                % end
+                % 
+                % % Extract Akaike Information Criterion (AIC) across Models 1-3 and compute relative deltas
+                % % (positive Delta_AIC indicates Model 1 Signed Certainty provides a better fit)
+                % aic1 = lme1.ModelCriterion.AIC;
+                % aic2 = lme2.ModelCriterion.AIC;
+                % aic3 = lme3.ModelCriterion.AIC;
+                
+                %%% CARA'S ADDED CONTENT START
+                n_dyads = numel(categories(sub_tbl.Session_ID));
+                n_pairs = n_sub - n_dyads;
+
+                % JALYNN KEPT
                 f1 = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
                 f2 = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
                 f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + Second_Dest_Dummy + (1 | Session_ID)';
-                % else
-                %     fprint('else statement entered model 2 rq2 channel'); 
-                %     f1 = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + Biosex_Dummy + (1 | Session_ID)';
-                %     f2 = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + (1 | Session_ID)';
-                %     f3 = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + Biosex_Dummy + (1 | Session_ID)';
-                % end
                 
-                % Fit all three nested certainty models via Maximum Likelihood ('ML') for AIC comparison
-                % MODEL 3 RQ2 for channels
-                lme1 = fitlme(sub_tbl, f1, 'Weights', w_vec, 'FitMethod', 'ML');
-                lme2 = fitlme(sub_tbl, f2, 'Weights', w_vec, 'FitMethod', 'ML');
-                lme3 = fitlme(sub_tbl, f3, 'Weights', w_vec, 'FitMethod', 'ML');
-                
-                % Locate the fixed-effect coefficient row for primary predictor SC_Centered in Model 1
-                sc_idx = find(strcmp(lme1.CoefficientNames, 'SC_Centered'));
-                if isempty(sc_idx)
-                    error('SC_Centered dropped due to collinearity (N = %d).', n_sub);
-                end
-                
-                % Extract Signed Certainty (SC_Centered) fixed-effect parameters and 95% confidence bounds
-                b_sc = lme1.Coefficients.Estimate(sc_idx);
-                se_sc = lme1.Coefficients.SE(sc_idx);
-                t_sc = lme1.Coefficients.tStat(sc_idx);
-                p_sc = lme1.Coefficients.pValue(sc_idx);
+                % Fixed-effect-only formulas for fallback
+                f1_lm = 'Beta ~ 1 + SC_Centered + Time_Centered + Age_Centered + BioSex_Dummy + Second_Dest_Dummy';
+                f2_lm = 'Beta ~ 1 + Certainty_Centered + Time_Centered + Age_Centered + BioSex_Dummy + Second_Dest_Dummy';
+                f3_lm = 'Beta ~ 1 + SC_Centered + Certainty_Centered + Time_Centered + Age_Centered + BioSex_Dummy + Second_Dest_Dummy';
 
-                df_sc = lme1.Coefficients.DF(sc_idx);
-                if df_sc <= 0 || isnan(p_sc)
-                    error('Saturated model with zero residual degrees of freedom (N = %d, df = %g).', n_sub, df_sc);
-                end
-
-                ci_sc = lme1.coefCI;
-                ci_l_sc = ci_sc(sc_idx, 1);
-                ci_u_sc = ci_sc(sc_idx, 2);
+                use_lme = (n_pairs >= 10);
+                model_status = "OK";
                 
-                % Extract Elapsed Decision Time covariate slope and p-value from Model 1
-                time_idx = find(strcmp(lme1.CoefficientNames, 'Time_Centered'));
-                if ~isempty(time_idx)
-                    b_time = lme1.Coefficients.Estimate(time_idx);
-                    p_time = lme1.Coefficients.pValue(time_idx);
+                if use_lme
+                    lme1 = fitlme(sub_tbl, f1, 'Weights', w_vec, 'FitMethod', 'ML');
+                    [psi, mse] = covarianceParameters(lme1);
+                    icc_val = psi{1}(1,1) / (psi{1}(1,1) + mse);
+                
+                    % Catch residual-variance collapse or degenerate ICC
+                    if mse < 1e-3 || icc_val > 0.95
+                        use_lme = false;
+                    end
+                end
+             
+                if use_lme
+                    lme2 = fitlme(sub_tbl, f2, 'Weights', w_vec, 'FitMethod', 'ML');
+                    lme3 = fitlme(sub_tbl, f3, 'Weights', w_vec, 'FitMethod', 'ML');
+                    
+                    % ... existing lme1 extraction ...
+                    % Aka Jalynn adds back in everything up until the else
+                    % statement
+                    sc_idx = find(strcmp(lme1.CoefficientNames, 'SC_Centered'));
+                    if isempty(sc_idx)
+                        error('SC_Centered dropped due to collinearity (N = %d).', n_sub);
+                    end
+
+                    b_sc    = lme1.Coefficients.Estimate(sc_idx);
+                    se_sc   = lme1.Coefficients.SE(sc_idx);
+                    t_sc    = lme1.Coefficients.tStat(sc_idx);
+                    p_sc    = lme1.Coefficients.pValue(sc_idx);
+                    df_sc   = lme1.Coefficients.DF(sc_idx);
+                    if df_sc <= 0 || isnan(p_sc)
+                        error('Saturated model with zero residual degrees of freedom (N = %d, df = %g).', n_sub, df_sc);
+                    end
+
+                    ci_sc   = lme1.coefCI;
+                    ci_l_sc = ci_sc(sc_idx, 1);
+                    ci_u_sc = ci_sc(sc_idx, 2);
+
+                    time_idx = find(strcmp(lme1.CoefficientNames, 'Time_Centered'));
+                    if ~isempty(time_idx)
+                        b_time = lme1.Coefficients.Estimate(time_idx);
+                        p_time = lme1.Coefficients.pValue(time_idx);
+                    else
+                        b_time = nan;
+                        p_time = nan;
+                    end
+
+                    aic1 = lme1.ModelCriterion.AIC;
+                    aic2 = lme2.ModelCriterion.AIC;
+                    aic3 = lme3.ModelCriterion.AIC;
+
+                    rq2_chan_full_rows = extract_lme_full_terms(lme1, base_meta_ch, rq2_chan_full_rows, model_status);
+                
+                % Return to Cara implementation
                 else
-                    b_time = nan;
-                    p_time = nan;
-                end
+                    % Fallback: Precision-weighted WLS (add dyad-clustered sandwich SEs if desired)
+                    lm1 = fitlm(sub_tbl, f1_lm, 'Weights', w_vec);
+                    lm2 = fitlm(sub_tbl, f2_lm, 'Weights', w_vec);
+                    lm3 = fitlm(sub_tbl, f3_lm, 'Weights', w_vec);
+                    model_status = "OK_WLS_Fallback";
                 
-                % Extract Akaike Information Criterion (AIC) across Models 1-3 and compute relative deltas
-                % (positive Delta_AIC indicates Model 1 Signed Certainty provides a better fit)
-                aic1 = lme1.ModelCriterion.AIC;
-                aic2 = lme2.ModelCriterion.AIC;
-                aic3 = lme3.ModelCriterion.AIC;
+                    sc_idx = find(strcmp(lm1.CoefficientNames, 'SC_Centered'));
+                    
+                    % Jalynn added safety check
+                    if isempty(sc_idx)
+                        error('SC_Centered dropped due to collinearity in WLS fallback (N = %d).', n_sub);
+                    end
+                    
+                    b_sc = lm1.Coefficients.Estimate(sc_idx);
+                    se_sc = lm1.Coefficients.SE(sc_idx);
+                    t_sc = lm1.Coefficients.tStat(sc_idx);
+                    p_sc = lm1.Coefficients.pValue(sc_idx);
+                    df_sc = lm1.DFE;
+
+                    % Jalynn added safety check
+                    if df_sc <= 0 || isnan(p_sc)
+                        error('Saturated WLS fallback model with zero residual df (N = %d, df = %g).', n_sub, df_sc);
+                    end
+                    
+                    ci_sc = lm1.coefCI;
+                    ci_l_sc = ci_sc(sc_idx, 1);
+                    ci_u_sc = ci_sc(sc_idx, 2);
+
+                    % JALYNN ADDED BACK IN
+                    % Extract Elapsed Decision Time covariate slope and p-value from Model 1
+                    time_idx = find(strcmp(lme1.CoefficientNames, 'Time_Centered'));
+                    if ~isempty(time_idx)
+                        b_time = lme1.Coefficients.Estimate(time_idx);
+                        p_time = lme1.Coefficients.pValue(time_idx);
+                    else
+                        b_time = nan;
+                        p_time = nan;
+                    end
+                
+                    aic1 = lm1.ModelCriterion.AIC;
+                    aic2 = lm2.ModelCriterion.AIC;
+                    aic3 = lm3.ModelCriterion.AIC;
+                end
+                %%% CARA'S ADDED CONTENT END
+
                 daic2 = aic2 - aic1;
                 daic3 = aic3 - aic1;
                 
